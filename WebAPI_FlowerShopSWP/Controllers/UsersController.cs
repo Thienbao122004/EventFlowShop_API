@@ -1,10 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP.Controllers
@@ -14,10 +19,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
     public class UsersController : ControllerBase
     {
         private readonly FlowerEventShopsContext _context;
+        private readonly IConfiguration _configuration;
 
-        public UsersController(FlowerEventShopsContext context)
+        public UsersController(FlowerEventShopsContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         // GET: api/Users
@@ -59,16 +66,30 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<User>> Login([FromBody] User loginUser)
         {
-            // Kiểm tra xem tên người dùng và mật khẩu có đúng không
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Name == loginUser.Name && u.Password == loginUser.Password);
 
             if (user == null)
             {
-                return Unauthorized(); // Trả về 401 nếu không tìm thấy người dùng
+                return Unauthorized();
             }
 
-            return user; // Trả về thông tin người dùng nếu đăng nhập thành công
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                    new Claim(ClaimTypes.Name, user.Name),
+                }),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            var tokenString = tokenHandler.WriteToken(token);
+
+            return Ok(new { Token = tokenString });
         }
 
         // POST: api/Users/register
@@ -87,7 +108,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return CreatedAtAction("GetUser", new { id = newUser.UserId }, newUser);
         }
 
-       
+
 
         // PUT: api/Users/update/{id}
         [HttpPut("update/{id}")]
@@ -119,7 +140,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return NoContent();
         }
 
-       
+
 
         // PUT: api/Users/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
