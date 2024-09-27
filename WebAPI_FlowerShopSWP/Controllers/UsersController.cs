@@ -63,6 +63,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
         // POST: api/Users/login
+        // POST: api/Users/login
+        // POST: api/Users/login
         [HttpPost("login")]
         public async Task<ActionResult<User>> Login([FromBody] User loginUser)
         {
@@ -74,21 +76,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return Unauthorized();
             }
 
+            // Tạo token
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                    new Claim(ClaimTypes.Name, user.Name),
-                }),
+            new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new Claim(ClaimTypes.Name, user.Name),
+        }),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
 
+            // Trả về token cho client
             return Ok(new { Token = tokenString });
         }
 
