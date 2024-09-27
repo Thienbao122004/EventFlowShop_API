@@ -27,6 +27,26 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return await _context.Flowers.ToListAsync();
         }
 
+        [HttpGet("searchbyname")]
+        public async Task<ActionResult<IEnumerable<Flower>>> SearchFlowers(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return BadRequest("Search name cannot be empty.");
+            }
+
+            var flowers = await _context.Flowers
+                .Where(f => f.FlowerName.ToLower().Contains(name.ToLower()))
+                .ToListAsync();
+
+            if (!flowers.Any())
+            {
+                return NotFound("No flowers found with the given name.");
+            }
+
+            return flowers;
+        }
+
         // GET: api/Flowers/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Flower>> GetFlower(int id)
