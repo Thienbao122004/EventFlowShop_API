@@ -17,7 +17,7 @@ namespace WebAPI_FlowerShopSWP
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowSpecificOrigin",
-                    builder => builder.WithOrigins("http://localhost:5173")
+                    builder => builder.WithOrigins("http://localhost:5175")
                                       .AllowAnyMethod()
                                       .AllowAnyHeader());
             });
