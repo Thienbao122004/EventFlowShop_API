@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -15,5 +16,6 @@ public partial class Payment
 
     public string PaymentStatus { get; set; } = null!;
 
-    public virtual Order Order { get; set; } = null!;
+    [ForeignKey("OrderId")]
+    public virtual Order? Order { get; set; }
 }
