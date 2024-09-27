@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -43,24 +45,34 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
 
         [HttpPost("addtocart")]
-        public async Task<IActionResult> AddToCart(int flowerId, int quantity, int userId)
+        [Authorize]
+        public async Task<IActionResult> AddToCart(int flowerId, int quantity)
         {
-            Console.WriteLine($"Attempting to add to cart for userId: {userId}");
+            // Get the userId from the token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            Console.WriteLine($"User ID from token: {userIdClaim}"); // Log the user ID
 
-            // Kiểm tra xem người dùng có tồn tại không
+            if (userIdClaim == null)
+            {
+                return BadRequest("Người dùng không tồn tại.");
+            }
+
+            int userId = int.Parse(userIdClaim); // Convert to int
+
+            // Check if the user exists
             var existingUser = await _context.Users.FindAsync(userId);
             if (existingUser == null)
             {
                 return BadRequest("Người dùng không tồn tại.");
             }
 
-            // Kiểm tra nếu người dùng có đơn hàng đang chờ
+            // Check if the user has a pending order
             var existingOrder = await _context.Orders
                 .FirstOrDefaultAsync(o => o.UserId == userId && o.OrderStatus == "Pending");
 
             if (existingOrder == null)
             {
-                // Tạo đơn hàng mới nếu không có
+                // Create a new order if none exists
                 existingOrder = new Order
                 {
                     UserId = userId,
@@ -69,23 +81,25 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     DeliveryAddress = "Default Address"
                 };
                 _context.Orders.Add(existingOrder);
-                await _context.SaveChangesAsync(); // Lưu để lấy orderId
+                await _context.SaveChangesAsync(); // Save to get orderId
             }
 
-            // Thêm hoa vào danh sách đơn hàng
+            // Add flower to the order
             var orderItem = new OrderItem
             {
                 OrderId = existingOrder.OrderId,
                 FlowerId = flowerId,
                 Quantity = quantity,
-                Price = (await _context.Flowers.FindAsync(flowerId)).Price // Lấy giá hoa
+                Price = (await _context.Flowers.FindAsync(flowerId)).Price // Get flower price
             };
 
-            _context.OrderItems.Add(orderItem); // Thêm vào bảng OrderItems
+            _context.OrderItems.Add(orderItem); // Add to OrderItems table
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Sản phẩm đã được thêm vào giỏ hàng." });
         }
+
+
 
         [HttpPost]
         public async Task<ActionResult<Order>> PostOrder(Order order)
