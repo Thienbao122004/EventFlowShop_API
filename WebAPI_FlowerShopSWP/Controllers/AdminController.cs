@@ -49,10 +49,10 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 // Bước 2: Xóa OrderItems và Payments liên quan đến các đơn hàng
                 foreach (var order in orders)
                 {
-                    // Xóa OrderItems
+                    
                     _context.OrderItems.RemoveRange(order.OrderItems);
 
-                    // Xóa Payments
+                    
                     _context.Payments.RemoveRange(order.Payments);
                 }
 
