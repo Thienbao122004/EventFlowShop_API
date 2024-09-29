@@ -6,6 +6,7 @@ namespace WebAPI_FlowerShopSWP.Models;
 public partial class Order
 {
     public int OrderId { get; set; }
+    public int BuyerId { get; set; }
 
     public int UserId { get; set; }
 
