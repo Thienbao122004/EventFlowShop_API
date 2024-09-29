@@ -41,7 +41,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 // Bước 1: Lấy tất cả các đơn hàng của người dùng
                 var orders = await _context.Orders
-                    .Where(o => o.BuyerId == id)
+                    .Where(o => o.UserId == id)
                     .Include(o => o.OrderItems) // Lấy các OrderItems liên quan
                     .Include(o => o.Payments) // Lấy các Payments liên quan
                     .ToListAsync();
@@ -118,6 +118,18 @@ namespace WebAPI_FlowerShopSWP.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+        // Get all orders
+        [HttpGet("orders")]
+        public async Task<ActionResult<IEnumerable<Order>>> GetAllOrders()
+        {
+            var orders = await _context.Orders
+                .Include(o => o.OrderItems)    // Lấy các OrderItems liên quan
+                .Include(o => o.Payments)      // Lấy các Payments liên quan
+                .Include(o => o.User)          // Lấy thông tin User dựa trên UserId
+                .ToListAsync();
+
+            return Ok(orders);
         }
     }
 }
