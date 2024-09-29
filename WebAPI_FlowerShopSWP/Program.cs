@@ -1,15 +1,10 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-<<<<<<< HEAD
 using System.Security.Claims;
 using System.Text;
-using System.Text.Json;
-=======
-using Microsoft.OpenApi.Models;
-using System.Text;
-using System.Text.Json.Serialization;
->>>>>>> 701bb36f57535897b6cf7cf99235bdeb631fbe95
 using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP
@@ -20,60 +15,26 @@ namespace WebAPI_FlowerShopSWP
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add logging
-            builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
-            builder.Logging.AddConsole();
-            builder.Logging.AddDebug();
-
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
             // Configure CORS
             builder.Services.AddCors(options =>
             {
-                options.AddDefaultPolicy(builder =>
-                {
-                    builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader();
-                });
+                options.AddPolicy("AllowSpecificOrigin",
+                    builder =>
+                    {
+                        builder.WithOrigins("http://localhost:5173") // Your frontend URL
+                               .AllowAnyHeader()
+                               .AllowAnyMethod()
+                               .AllowCredentials()
+                               .SetIsOriginAllowed(_ => true); // Allow any origin
+                    });
             });
 
-            builder.Services.AddControllers()
-                .AddJsonOptions(options =>
-                {
-                    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
-                    options.JsonSerializerOptions.MaxDepth = 64; // Tùy chọn để tăng chiều sâu tối đa nếu cần
-                });
+            builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(c =>
-            {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Flower Shop API", Version = "v1" });
-
-                // Cấu hình cho xác thực JWT
-                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-                {
-                    In = ParameterLocation.Header,
-                    Description = "Please enter 'Bearer' [space] and then your token",
-                    Name = "Authorization",
-                    Type = SecuritySchemeType.ApiKey
-                });
-
-                c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            new string[] {}
-        }
-    });
-            });
+            builder.Services.AddSwaggerGen();
 
             // Configure database context
             builder.Services.AddDbContext<FlowerEventShopsContext>(options =>
@@ -83,7 +44,13 @@ namespace WebAPI_FlowerShopSWP
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+                options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            })
+            .AddCookie(options =>
+            {
+                options.LoginPath = "/api/LoginGoogle/login-google";
+                options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
             })
             .AddJwtBearer(options =>
             {
@@ -95,36 +62,20 @@ namespace WebAPI_FlowerShopSWP
                     ValidateAudience = false,
                     NameClaimType = ClaimTypes.NameIdentifier
                 };
-                options.Events = new JwtBearerEvents
+            })
+            .AddGoogle(googleOptions =>
+            {
+            googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
+            googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+            googleOptions.CallbackPath = new PathString("/api/LoginGoogle/google-callback");
+                googleOptions.SaveTokens = true;
+                googleOptions.Events.OnRemoteFailure = (context) =>
                 {
-                    OnAuthenticationFailed = context =>
-                    {
-                        context.NoResult();
-                        context.Response.StatusCode = 500;
-                        context.Response.ContentType = "text/plain";
-                        context.Response.WriteAsync(context.Exception.ToString()).Wait();
-                        return Task.CompletedTask;
-                    },
-                    OnChallenge = context =>
-                    {
-                        context.HandleResponse();
-                        context.Response.StatusCode = 401;
-                        context.Response.ContentType = "application/json";
-                        var result = JsonSerializer.Serialize("401 Not authorized");
-                        return context.Response.WriteAsync(result);
-                    },
-                    OnTokenValidated = context =>
-                    {
-                        Console.WriteLine("OnTokenValidated: " + context.SecurityToken);
-                        return Task.CompletedTask;
-                    }
+                    context.Response.Redirect("/api/LoginGoogle/login-google");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
                 };
             });
-            builder.Services.AddAuthorization(options =>
-            {
-                options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-            });
-
 
             var app = builder.Build();
 
@@ -138,7 +89,7 @@ namespace WebAPI_FlowerShopSWP
             app.UseHttpsRedirection();
 
             // Use CORS before routing and authorization
-            app.UseCors();
+            app.UseCors("AllowSpecificOrigin");
 
             app.UseRouting();
 
