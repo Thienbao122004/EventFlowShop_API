@@ -4,22 +4,28 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebAPI_FlowerShopSWP.Models;
+using Microsoft.Extensions.Logging;
+using System.IdentityModel.Tokens.Jwt;
+using System.Globalization;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
-    [Route("api/[controller]")]
+    [Authorize]
     [ApiController]
+    [Route("api/[controller]")]
     public class OrdersController : ControllerBase
     {
         private readonly FlowerEventShopsContext _context;
-
-        public OrdersController(FlowerEventShopsContext context)
+        private readonly ILogger<OrdersController> _logger;
+        public OrdersController(FlowerEventShopsContext context, ILogger<OrdersController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         // GET: api/Orders
@@ -46,6 +52,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [HttpPost("addtocart")]
         [Authorize]
+
         public async Task<IActionResult> AddToCart(int flowerId, int quantity)
         {
             // Get the userId from the token
@@ -110,9 +117,44 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return CreatedAtAction("GetOrder", new { id = order.OrderId }, order);
         }
 
+        [HttpPost("checkout")]
+        public async Task<IActionResult> Checkout()
+        {
+            try
+            {
+                _logger.LogInformation("Checkout method called");
 
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null)
+                {
+                    _logger.LogWarning("User ID claim not found");
+                    return Unauthorized("User ID claim not found");
+                }
 
-        
+                if (!int.TryParse(userIdClaim.Value, out int userId))
+                {
+                    _logger.LogWarning("Invalid user ID format");
+                    return BadRequest("Invalid user ID format");
+                }
+
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                {
+                    _logger.LogWarning($"User with ID {userId} not found");
+                    return NotFound($"User with ID {userId} not found");
+                }
+
+                // Rest of your checkout logic...
+
+                return Ok(new { message = "Checkout successful" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during checkout");
+                return StatusCode(500, "An error occurred during checkout");
+            }
+        }
+
 
         // PUT: api/Orders/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -14,6 +15,9 @@ public partial class Order
     public string OrderStatus { get; set; } = null!;
 
     public string? DeliveryAddress { get; set; }
+
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? TotalAmount { get; set; }
 
     public virtual User User { get; set; } = null!;
 

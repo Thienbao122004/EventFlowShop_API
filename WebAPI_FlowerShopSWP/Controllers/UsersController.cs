@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,26 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public async Task<ActionResult<User>> GetUser(int id)
         {
             var user = await _context.Users.FindAsync(id);
+
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            return user;
+        }
+
+        [Authorize]
+        [HttpGet("profile")]
+        public async Task<ActionResult<User>> GetProfile()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+
+            var user = await _context.Users.FindAsync(int.Parse(userId));
 
             if (user == null)
             {
@@ -105,7 +126,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 return Conflict("Email already in use.");
             }
-
+            newUser.UserType = "Buyer";
             _context.Users.Add(newUser);
             await _context.SaveChangesAsync();
 
@@ -175,6 +196,42 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
             return NoContent();
+        }
+
+        [Authorize]
+        [HttpPut("profile")]
+        public async Task<IActionResult> UpdateUserProfile([FromBody] User updatedUser)
+        {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var user = await _context.Users.FindAsync(userId);
+
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            user.Name = updatedUser.Name;
+            user.Email = updatedUser.Email;
+            user.Phone = updatedUser.Phone;
+            user.Address = updatedUser.Address;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!UserExists(userId))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return Ok(user);
         }
 
         // POST: api/Users

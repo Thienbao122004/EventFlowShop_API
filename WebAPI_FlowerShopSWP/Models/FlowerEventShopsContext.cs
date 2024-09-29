@@ -37,9 +37,8 @@ public partial class FlowerEventShopsContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
-//    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-//#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-//        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R;Initial Catalog=FlowerEventShops;Integrated Security=True;Trust Server Certificate=True");
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R;Initial Catalog=FlowerEventShops;Integrated Security=True;Trust Server Certificate=True");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -204,7 +203,7 @@ public partial class FlowerEventShopsContext : DbContext
             entity.HasKey(e => e.OrderId).HasName("PK__Orders__0809335D68AED2CC");
 
             entity.Property(e => e.OrderId).HasColumnName("orderId");
-            entity.Property(e => e.UserId).HasColumnName("userId"); 
+            entity.Property(e => e.UserId).HasColumnName("userId");
             entity.Property(e => e.DeliveryAddress)
                 .HasMaxLength(255)
                 .HasColumnName("deliveryAddress");
@@ -216,10 +215,16 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasMaxLength(20)
                 .HasColumnName("orderStatus");
 
+            // Thêm cấu hình cho trường totalAmount
+            entity.Property(e => e.TotalAmount)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("totalAmount")
+                .HasDefaultValue(0.00m);
+
             entity.HasOne(d => d.User).WithMany(p => p.Orders)
-                .HasForeignKey(d => d.UserId) // Thay đổi từ BuyerId thành UserId
+                .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Orders__userId__5629CD9C"); // Cập nhật tên ràng buộc nếu cần
+                .HasConstraintName("FK__Orders__userId__5629CD9C");
         });
 
         modelBuilder.Entity<OrderItem>(entity =>

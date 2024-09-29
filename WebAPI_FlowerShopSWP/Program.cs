@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP
@@ -12,23 +14,34 @@ namespace WebAPI_FlowerShopSWP
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Add logging
+            builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
+            builder.Logging.AddConsole();
+            builder.Logging.AddDebug();
+
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+
+            // Configure CORS
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowSpecificOrigin",
-                    builder => builder.WithOrigins("http://localhost:5175")
-                                      .AllowAnyMethod()
-                                      .AllowAnyHeader());
+                options.AddDefaultPolicy(builder =>
+                {
+                    builder.AllowAnyOrigin()
+                           .AllowAnyMethod()
+                           .AllowAnyHeader();
+                });
             });
 
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
+            // Configure database context
             builder.Services.AddDbContext<FlowerEventShopsContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("ConnectDB")));
 
+            // Configure authentication schemes
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -42,6 +55,31 @@ namespace WebAPI_FlowerShopSWP
                     IssuerSigningKey = key,
                     ValidateIssuer = false,
                     ValidateAudience = false,
+                    NameClaimType = ClaimTypes.NameIdentifier
+                };
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = context =>
+                    {
+                        context.NoResult();
+                        context.Response.StatusCode = 500;
+                        context.Response.ContentType = "text/plain";
+                        context.Response.WriteAsync(context.Exception.ToString()).Wait();
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = context =>
+                    {
+                        context.HandleResponse();
+                        context.Response.StatusCode = 401;
+                        context.Response.ContentType = "application/json";
+                        var result = JsonSerializer.Serialize("401 Not authorized");
+                        return context.Response.WriteAsync(result);
+                    },
+                    OnTokenValidated = context =>
+                    {
+                        Console.WriteLine("OnTokenValidated: " + context.SecurityToken);
+                        return Task.CompletedTask;
+                    }
                 };
             });
 
@@ -51,13 +89,16 @@ namespace WebAPI_FlowerShopSWP
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
+                app.UseDeveloperExceptionPage();
             }
 
             app.UseHttpsRedirection();
 
-            // Enable CORS
+            // Use CORS before routing and authorization
+            app.UseCors();
 
-            app.UseCors("AllowSpecificOrigin"); // Sử dụng chính sách CORS đã định nghĩa
+            app.UseRouting();
+
             app.UseAuthentication();
             app.UseAuthorization();
 
