@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Security.Claims;
 using System.Text;
 using WebAPI_FlowerShopSWP.Models;
 
@@ -16,7 +15,7 @@ namespace WebAPI_FlowerShopSWP
             var builder = WebApplication.CreateBuilder(args);
 
             var secretKey = builder.Configuration["Jwt:SecretKey"];
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
             // Configure CORS
             builder.Services.AddCors(options =>
@@ -45,14 +44,14 @@ namespace WebAPI_FlowerShopSWP
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
-            //.AddCookie(options =>
-            //{
-            //    options.LoginPath = "/api/LoginGoogle/login-google";
-            //    options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
-            //})
+            .AddCookie(options =>
+            {
+                options.LoginPath = "/api/LoginGoogle/login-google";
+                options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
+            })
             .AddJwtBearer(options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -62,22 +61,23 @@ namespace WebAPI_FlowerShopSWP
                     ValidateIssuer = false,
                     ValidateAudience = false,
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.Zero,
+                    RoleClaimType = "UserType" // Add this line to use UserType as the role claim
                 };
+            })
+            .AddGoogle(googleOptions =>
+            {
+                googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
+                googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+                googleOptions.CallbackPath = "/api/LoginGoogle/google-callback";
             });
-            //.AddGoogle(googleOptions =>
-            //{
-            //googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-            //googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-            //googleOptions.CallbackPath = new PathString("/api/LoginGoogle/google-callback");
-            //    googleOptions.SaveTokens = true;
-            //    googleOptions.Events.OnRemoteFailure = (context) =>
-            //    {
-            //        context.Response.Redirect("/api/LoginGoogle/login-google");
-            //        context.HandleResponse();
-            //        return Task.CompletedTask;
-            //    };
-            //});
+
+            // Configure authorization policies
+            builder.Services.AddAuthorization(options =>
+            {
+                options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+                options.AddPolicy("BuyerSellerOnly", policy => policy.RequireRole("Buyer", "Seller"));
+            });
 
             var app = builder.Build();
 
@@ -99,7 +99,6 @@ namespace WebAPI_FlowerShopSWP
             app.UseAuthorization();
 
             app.MapControllers();
-            app.UseDeveloperExceptionPage();
 
             app.Run();
         }

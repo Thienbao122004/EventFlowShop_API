@@ -38,7 +38,7 @@ public partial class FlowerEventShopsContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R;Initial Catalog=FlowerEventShops;Integrated Security=True;Trust Server Certificate=True");
+        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R\\SQLEXPRESS;Initial Catalog=FlowerEventShops;Integrated Security=True;Trust Server Certificate=True");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,7 +132,7 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("price");
             entity.Property(e => e.Quantity).HasColumnName("quantity");
-            entity.Property(e => e.SellerrId).HasColumnName("sellerId");
+            entity.Property(e => e.UserId).HasColumnName("userId");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasColumnName("status");
@@ -143,7 +143,7 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasConstraintName("FK__Flowers__categor__5165187F");
 
             entity.HasOne(d => d.Seller).WithMany(p => p.Flowers)
-                .HasForeignKey(d => d.SellerrId)
+                .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Flowers__sellerI__5070F446");
         });

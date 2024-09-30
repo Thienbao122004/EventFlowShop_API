@@ -6,7 +6,7 @@ using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [Route("api/[controller]")]
     [ApiController]
     public class AdminController : ControllerBase

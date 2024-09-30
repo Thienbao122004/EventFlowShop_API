@@ -84,8 +84,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
         // POST: api/Users/login
-        // POST: api/Users/login
-        // POST: api/Users/login
         [HttpPost("login")]
         public async Task<ActionResult<User>> Login([FromBody] User loginUser)
         {
@@ -102,15 +100,24 @@ namespace WebAPI_FlowerShopSWP.Controllers
             var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
 
             var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                new Claim(ClaimTypes.Name, user.Name)
-            };
+    {
+        new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+        new Claim(ClaimTypes.Name, user.Name)
+    };
 
-            // Thêm vai trò vào claims nếu người dùng là admin
-            if (user.UserType == "Admin") // Giả sử bạn có thuộc tính Role trong User
+            // Thêm vai trò vào claims dựa trên UserType
+            switch (user.UserType)
             {
-                claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+                case "Admin":
+                    claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+                    break;
+                case "Seller":
+                    claims.Add(new Claim(ClaimTypes.Role, "Seller"));
+                    break;
+                // Thêm các trường hợp khác nếu cần
+                default:
+                    claims.Add(new Claim(ClaimTypes.Role, "User"));
+                    break;
             }
 
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -123,8 +130,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
 
-            // Trả về token cho client
-            return Ok(new { Token = tokenString });
+            // Trả về token và UserType cho client
+            return Ok(new { Token = tokenString, user.UserType });
         }
 
 

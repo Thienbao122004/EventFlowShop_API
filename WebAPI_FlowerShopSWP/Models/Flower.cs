@@ -7,7 +7,7 @@ public partial class Flower
 {
     public int FlowerId { get; set; }
 
-    public int SellerrId { get; set; }
+    public int UserId { get; set; }
 
     public int CategoryId { get; set; }
 
