@@ -12,6 +12,7 @@ using WebAPI_FlowerShopSWP.Models;
 using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using System.Globalization;
+using WebAPI_FlowerShopSWP.Repository;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -22,10 +23,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
     {
         private readonly FlowerEventShopsContext _context;
         private readonly ILogger<OrdersController> _logger;
-        public OrdersController(FlowerEventShopsContext context, ILogger<OrdersController> logger)
+        private readonly IEmailSender _emailSender;
+
+        public OrdersController(FlowerEventShopsContext context, ILogger<OrdersController> logger, IEmailSender emailSender)
         {
             _context = context;
             _logger = logger;
+            _emailSender = emailSender;
         }
 
         // GET: api/Orders
@@ -118,23 +122,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
         [HttpPost("checkout")]
-        public async Task<IActionResult> Checkout()
+        public async Task<IActionResult> Checkout([FromBody] List<Flower> cartItems)
         {
             try
             {
                 _logger.LogInformation("Checkout method called");
 
                 var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-                if (userIdClaim == null)
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
                 {
-                    _logger.LogWarning("User ID claim not found");
-                    return Unauthorized("User ID claim not found");
-                }
-
-                if (!int.TryParse(userIdClaim.Value, out int userId))
-                {
-                    _logger.LogWarning("Invalid user ID format");
-                    return BadRequest("Invalid user ID format");
+                    _logger.LogWarning("Invalid user ID");
+                    return Unauthorized("Invalid user ID");
                 }
 
                 var user = await _context.Users.FindAsync(userId);
@@ -144,101 +142,155 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     return NotFound($"User with ID {userId} not found");
                 }
 
-                // Rest of your checkout logic...
+                // Create a new order
+                var newOrder = new Order
+                {
+                    UserId = userId,
+                    OrderStatus = "Pending",
+                    OrderDate = DateTime.Now,
+                    OrderItems = new List<OrderItem>()
+                };
 
-                return Ok(new { message = "Checkout successful" });
+                decimal totalAmount = 0;
+                foreach (var cartItem in cartItems)
+                {
+                    var flower = await _context.Flowers.FindAsync(cartItem.FlowerId);
+                    if (flower == null)
+                    {
+                        return BadRequest($"Flower with ID {cartItem.FlowerId} not found");
+                    }
+
+                    if (flower.Quantity < cartItem.Quantity)
+                    {
+                        return BadRequest($"Không đủ số lượng hoa: {flower.FlowerName}");
+                    }
+
+                    flower.Quantity -= cartItem.Quantity;
+                    totalAmount += flower.Price * cartItem.Quantity;
+
+                    newOrder.OrderItems.Add(new OrderItem
+                    {
+                        FlowerId = flower.FlowerId,
+                        Quantity = cartItem.Quantity,
+                        Price = flower.Price
+                    });
+                }
+
+                newOrder.TotalAmount = totalAmount;
+                newOrder.OrderStatus = "Thành công";
+
+                _context.Orders.Add(newOrder);
+                await _context.SaveChangesAsync();
+
+                // Send confirmation email
+                string emailSubject = "Đơn hàng của bạn đã được xác nhận";
+                string emailBody = $@"Xin chào {user.Name}, 
+                Đơn hàng của bạn đã được xác nhận thành công. 
+                Chi tiết đơn hàng: Mã đơn hàng: {newOrder.OrderId} 
+                Ngày đặt hàng: {newOrder.OrderDate:dd/MM/yyyy HH:mm} 
+                Tổng giá trị: {totalAmount:N0} VNĐ
+                Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
+                Trân trọng,
+                Đội ngũ hỗ trợ khách hàng";
+
+                await _emailSender.SendEmailAsync(user.Email, emailSubject, emailBody);
+
+                _logger.LogInformation($"Checkout thành công {newOrder.OrderId}");
+                return Ok(new { message = "Checkout thành công", orderId = newOrder.OrderId, totalAmount });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during checkout");
-                return StatusCode(500, "An error occurred during checkout");
+                _logger.LogError(ex, "Bị lỗi khi checkout");
+                return StatusCode(500, "Bị lỗi khi checkout");
             }
         }
+
 
 
         // PUT: api/Orders/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutOrder(int id, Order order)
+    public async Task<IActionResult> PutOrder(int id, Order order)
+    {
+        if (id != order.OrderId)
         {
-            if (id != order.OrderId)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(order).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!OrderExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
+            return BadRequest();
         }
 
-        // POST: api/Orders
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-       
-        [HttpPut("updatecartitem")]
-        public async Task<IActionResult> UpdateCartItem(int orderItemId, int quantity)
-        {
-            var orderItem = await _context.OrderItems.FindAsync(orderItemId);
-            if (orderItem == null)
-            {
-                return NotFound("Sản phẩm không tồn tại trong giỏ hàng.");
-            }
+        _context.Entry(order).State = EntityState.Modified;
 
-            orderItem.Quantity = quantity;
+        try
+        {
             await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Số lượng sản phẩm đã được cập nhật." });
         }
-
-        [HttpDelete("removecartitem/{orderItemId}")]
-        public async Task<IActionResult> RemoveCartItem(int orderItemId)
+        catch (DbUpdateConcurrencyException)
         {
-            var orderItem = await _context.OrderItems.FindAsync(orderItemId);
-            if (orderItem == null)
-            {
-                return NotFound("Sản phẩm không tồn tại trong giỏ hàng.");
-            }
-
-            _context.OrderItems.Remove(orderItem);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Sản phẩm đã được xóa khỏi giỏ hàng." });
-        }
-
-        // DELETE: api/Orders/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteOrder(int id)
-        {
-            var order = await _context.Orders.FindAsync(id);
-            if (order == null)
+            if (!OrderExists(id))
             {
                 return NotFound();
             }
-
-            _context.Orders.Remove(order);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            else
+            {
+                throw;
+            }
         }
 
-        private bool OrderExists(int id)
-        {
-            return _context.Orders.Any(e => e.OrderId == id);
-        }
+        return NoContent();
     }
+
+    // POST: api/Orders
+    // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+
+    [HttpPut("updatecartitem")]
+    public async Task<IActionResult> UpdateCartItem(int orderItemId, int quantity)
+    {
+        var orderItem = await _context.OrderItems.FindAsync(orderItemId);
+        if (orderItem == null)
+        {
+            return NotFound("Sản phẩm không tồn tại trong giỏ hàng.");
+        }
+
+        orderItem.Quantity = quantity;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Số lượng sản phẩm đã được cập nhật." });
+    }
+
+    [HttpDelete("removecartitem/{orderItemId}")]
+    public async Task<IActionResult> RemoveCartItem(int orderItemId)
+    {
+        var orderItem = await _context.OrderItems.FindAsync(orderItemId);
+        if (orderItem == null)
+        {
+            return NotFound("Sản phẩm không tồn tại trong giỏ hàng.");
+        }
+
+        _context.OrderItems.Remove(orderItem);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Sản phẩm đã được xóa khỏi giỏ hàng." });
+    }
+
+    // DELETE: api/Orders/5
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteOrder(int id)
+    {
+        var order = await _context.Orders.FindAsync(id);
+        if (order == null)
+        {
+            return NotFound();
+        }
+
+        _context.Orders.Remove(order);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    private bool OrderExists(int id)
+    {
+        return _context.Orders.Any(e => e.OrderId == id);
+    }
+}
+
 }

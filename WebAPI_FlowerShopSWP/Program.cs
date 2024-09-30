@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using WebAPI_FlowerShopSWP.Models;
+using WebAPI_FlowerShopSWP.Repository;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -17,7 +18,11 @@ namespace WebAPI_FlowerShopSWP
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
-            // Configure CORS
+            // Configure
+            // 
+            //Add Email
+            builder.Services.AddTransient<IEmailSender, EmailSender>();
+
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowSpecificOrigin",
