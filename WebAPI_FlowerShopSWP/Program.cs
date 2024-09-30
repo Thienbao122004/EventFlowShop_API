@@ -48,11 +48,11 @@ namespace WebAPI_FlowerShopSWP
                 options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
                 options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
-            .AddCookie(options =>
-            {
-                options.LoginPath = "/api/LoginGoogle/login-google";
-                options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
-            })
+            //.AddCookie(options =>
+            //{
+            //    options.LoginPath = "/api/LoginGoogle/login-google";
+            //    options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
+            //})
             .AddJwtBearer(options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -64,20 +64,20 @@ namespace WebAPI_FlowerShopSWP
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
-            })
-            .AddGoogle(googleOptions =>
-            {
-            googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-            googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-            googleOptions.CallbackPath = new PathString("/api/LoginGoogle/google-callback");
-                googleOptions.SaveTokens = true;
-                googleOptions.Events.OnRemoteFailure = (context) =>
-                {
-                    context.Response.Redirect("/api/LoginGoogle/login-google");
-                    context.HandleResponse();
-                    return Task.CompletedTask;
-                };
             });
+            //.AddGoogle(googleOptions =>
+            //{
+            //googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
+            //googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+            //googleOptions.CallbackPath = new PathString("/api/LoginGoogle/google-callback");
+            //    googleOptions.SaveTokens = true;
+            //    googleOptions.Events.OnRemoteFailure = (context) =>
+            //    {
+            //        context.Response.Redirect("/api/LoginGoogle/login-google");
+            //        context.HandleResponse();
+            //        return Task.CompletedTask;
+            //    };
+            //});
 
             var app = builder.Build();
 
