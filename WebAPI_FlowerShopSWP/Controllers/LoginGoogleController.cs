@@ -1,20 +1,17 @@
-﻿using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
-using Microsoft.AspNetCore.Cors;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Google.Apis.Auth;
 using WebAPI_FlowerShopSWP.Models;
+using System.Text.Json;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [EnableCors("AllowAll")]
     public class LoginGoogleController : ControllerBase
     {
         private readonly FlowerEventShopsContext _context;
@@ -27,86 +24,52 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _configuration = configuration;
             _logger = logger;
         }
-        [EnableCors("AllowAll")]
-        [HttpGet("login-google")]
-        public IActionResult LoginGoogle()
-        {
-            _logger.LogInformation("LoginGoogle method called");
 
-            var properties = new AuthenticationProperties
-            {
-                RedirectUri = Url.Action("GoogleCallback", "LoginGoogle", null, Request.Scheme),
-                Items =
+        public class GoogleLoginRequest
         {
-            { "LoginProvider", "Google" },
-            { ".xsrf", Guid.NewGuid().ToString() }  // Ensure state is unique
+            public string? AccessToken { get; set; }
+            public string? IdToken { get; set; }
         }
-            };
 
-            // Start the Google authentication challenge
-            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
-        }
-        [EnableCors("AllowAll")]
-        [HttpGet("google-callback")]
-        public async Task<IActionResult> GoogleCallback()
+        [HttpPost("google-login")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
         {
-            _logger.LogInformation("GoogleCallback method called");
             try
             {
-                // Authenticate the user via Google OAuth
-                var authenticateResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+                _logger.LogInformation($"Received access token: {request.AccessToken}");
+                _logger.LogInformation($"Received ID token: {request.IdToken}");
 
-                if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
+                // Validate the ID token
+                var validationSettings = new GoogleJsonWebSignature.ValidationSettings()
                 {
-                    _logger.LogError("Google authentication failed.");
-                    return BadRequest("Google authentication failed.");
-                }
+                    Audience = new[] { _configuration["Authentication:Google:ClientId"] }
+                };
+                var payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, validationSettings);
 
-                // Extract Google user information
-                var googleUser = authenticateResult.Principal;
-                var email = googleUser.FindFirstValue(ClaimTypes.Email);
-                var name = googleUser.FindFirstValue(ClaimTypes.Name);
-
-                // Check if the user exists in the database
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-
+                // Find or create user
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
                 if (user == null)
                 {
-                    // Add a new user if not found
                     user = new User
                     {
-                        Email = email,
-                        Name = name,
+                        Email = payload.Email,
+                        Name = payload.Name,
+                        // Set other properties as needed
                     };
                     _context.Users.Add(user);
                     await _context.SaveChangesAsync();
                 }
 
                 // Generate JWT token
-                var tokenString = GenerateJwtToken(user);
+                var token = GenerateJwtToken(user);
 
-                // Redirect back to the frontend with the JWT token in the URL
-                var redirectUrl = $"http://localhost:5173/login?token={tokenString}";
-                return Redirect(redirectUrl);
+                return Ok(new { Token = token, User = new { user.UserId, user.Name, user.Email } });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred during Google authentication callback");
-                return StatusCode(500, "An error occurred during authentication");
+                _logger.LogError(ex, "An error occurred during Google authentication");
+                return StatusCode(500, $"An error occurred during authentication: {ex.Message}");
             }
-        }
-
-        [HttpGet("test")]
-        public IActionResult Test()
-        {
-            return Ok("Test endpoint working");
-        }
-
-        [HttpPost("logout")]
-        public async Task<IActionResult> Logout()
-        {
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Ok("Logged out successfully");
         }
 
         private string GenerateJwtToken(User user)
@@ -117,15 +80,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                    new Claim(ClaimTypes.Name, user.Name),
-                    new Claim(ClaimTypes.Email, user.Email)
-                }),
-                Expires = DateTime.UtcNow.AddHours(1),
+            new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Name)
+        }),
+                Expires = DateTime.UtcNow.AddDays(7),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
     }
-}
+    }

@@ -28,7 +28,8 @@ namespace WebAPI_FlowerShopSWP
                                .AllowAnyHeader()
                                .AllowAnyMethod()
                                .AllowCredentials()
-                               .SetIsOriginAllowed(_ => true); // Allow any origin
+                               .SetIsOriginAllowed(_ => true)
+                               .WithExposedHeaders("Authorization");
                     });
             });
 
@@ -60,7 +61,8 @@ namespace WebAPI_FlowerShopSWP
                     IssuerSigningKey = key,
                     ValidateIssuer = false,
                     ValidateAudience = false,
-                    NameClaimType = ClaimTypes.NameIdentifier
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.Zero
                 };
             })
             .AddGoogle(googleOptions =>
@@ -97,6 +99,7 @@ namespace WebAPI_FlowerShopSWP
             app.UseAuthorization();
 
             app.MapControllers();
+            app.UseDeveloperExceptionPage();
 
             app.Run();
         }
