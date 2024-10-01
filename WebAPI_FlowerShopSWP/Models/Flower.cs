@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -25,11 +26,15 @@ public partial class Flower
 
     public string? ImageUrl { get; set; }
 
+    [JsonIgnore] // Ngăn không cho thuộc tính này được serialize
     public virtual Category? Category { get; set; } = null!;
 
+    [JsonIgnore] // Ngăn không cho thuộc tính này được serialize
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 
+    [JsonIgnore] // Ngăn không cho thuộc tính này được serialize
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
 
+    [JsonIgnore] // Ngăn không cho thuộc tính này được serialize
     public virtual User? Seller { get; set; } = null!;
 }
