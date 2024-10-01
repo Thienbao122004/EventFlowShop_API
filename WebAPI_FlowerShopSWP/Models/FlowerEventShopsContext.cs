@@ -136,12 +136,10 @@ public partial class FlowerEventShopsContext : DbContext
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasColumnName("status");
-
             entity.HasOne(d => d.Category).WithMany(p => p.Flowers)
                 .HasForeignKey(d => d.CategoryId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Flowers__categor__5165187F");
-
             entity.HasOne(d => d.Seller).WithMany(p => p.Flowers)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)

@@ -159,7 +159,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     var newOrder = new Order
                     {
                         UserId = userId,
-                        OrderStatus = "Complete",
+                        OrderStatus = "Completed",
                         OrderDate = DateTime.Now,
                         DeliveryAddress = "Default Address", // You may want to get this from the user input
                         OrderItems = new List<OrderItem>()
