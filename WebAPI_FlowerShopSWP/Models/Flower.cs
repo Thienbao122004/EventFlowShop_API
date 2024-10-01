@@ -1,5 +1,8 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using Shopping.Repository.Validation;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -24,6 +27,7 @@ public partial class Flower
     public string Status { get; set; } = null!;
 
     public string? ImageUrl { get; set; }
+   
 
     public virtual Category? Category { get; set; } = null!;
 
@@ -32,4 +36,5 @@ public partial class Flower
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
 
     public virtual User? Seller { get; set; } = null!;
+
 }
