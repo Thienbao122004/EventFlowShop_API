@@ -1,6 +1,12 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using Shopping.Repository.Validation;
+using System;
 using System.Collections.Generic;
+<<<<<<< HEAD
 using System.Text.Json.Serialization;
+=======
+using System.ComponentModel.DataAnnotations.Schema;
+>>>>>>> 191ef86e8b5fd800c38c3a8db5132af426cb8c6b
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -25,6 +31,7 @@ public partial class Flower
     public string Status { get; set; } = null!;
 
     public string? ImageUrl { get; set; }
+   
 
     [JsonIgnore] // Ngăn không cho thuộc tính này được serialize
     public virtual Category? Category { get; set; } = null!;
@@ -37,4 +44,5 @@ public partial class Flower
 
     [JsonIgnore] // Ngăn không cho thuộc tính này được serialize
     public virtual User? Seller { get; set; } = null!;
+
 }

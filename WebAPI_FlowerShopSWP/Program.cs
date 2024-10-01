@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -17,12 +18,23 @@ namespace WebAPI_FlowerShopSWP
     {
         public static void Main(string[] args)
         {
+            var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            if (!Directory.Exists(wwwrootPath))
+            {
+                Directory.CreateDirectory(wwwrootPath);
+            }
+            var imagesPath = Path.Combine(wwwrootPath, "images");
+            if (!Directory.Exists(imagesPath))
+            {
+                Directory.CreateDirectory(imagesPath);
+            }
             var builder = WebApplication.CreateBuilder(args);
 
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
             // Configure
+            
             // 
             //Add Email
             builder.Services.AddTransient<IEmailSender, EmailSender>();
@@ -116,8 +128,11 @@ namespace WebAPI_FlowerShopSWP
                 options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
                 options.AddPolicy("BuyerSellerOnly", policy => policy.RequireRole("Buyer", "Seller"));
             });
+            builder.Services.AddSingleton<IWebHostEnvironment>(builder.Environment);
+
 
             var app = builder.Build();
+            app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 
             if (app.Environment.IsDevelopment())
             {
@@ -127,6 +142,7 @@ namespace WebAPI_FlowerShopSWP
             }
 
             app.UseHttpsRedirection();
+            app.UseStaticFiles();
 
             // Use CORS before routing and authorization
             app.UseCors("AllowSpecificOrigin");
@@ -137,7 +153,12 @@ namespace WebAPI_FlowerShopSWP
             app.UseAuthorization();
 
             app.MapControllers();
-
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(
+        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")),
+                RequestPath = ""
+            });
             app.Run();
         }
     }
