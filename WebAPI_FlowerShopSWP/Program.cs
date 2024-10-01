@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.Repository;
@@ -28,7 +29,7 @@ namespace WebAPI_FlowerShopSWP
                 options.AddPolicy("AllowSpecificOrigin",
                     builder =>
                     {
-                        builder.WithOrigins("http://localhost:5173") // Your frontend URL
+                        builder.WithOrigins("http://localhost:5173", "http://localhost:5174") // Your frontend URL
                                .AllowAnyHeader()
                                .AllowAnyMethod()
                                .AllowCredentials()

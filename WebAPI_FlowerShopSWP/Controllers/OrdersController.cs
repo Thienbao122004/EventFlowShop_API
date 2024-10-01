@@ -121,88 +121,133 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return CreatedAtAction("GetOrder", new { id = order.OrderId }, order);
         }
 
-        [HttpPost("checkout")]
-        public async Task<IActionResult> Checkout([FromBody] List<Flower> cartItems)
+        public class CartItem
         {
-            try
+            public int FlowerId { get; set; }
+            public int Quantity { get; set; }
+        }
+
+        [HttpPost("checkout")]
+        public async Task<IActionResult> Checkout([FromBody] List<CartItem> cartItems)
+        {
+            _logger.LogInformation("Checkout method called with {CartItemCount} items", cartItems?.Count ?? 0);
+
+            if (cartItems == null || !cartItems.Any())
             {
-                _logger.LogInformation("Checkout method called");
+                _logger.LogWarning("Cart is empty or invalid");
+                return BadRequest("Giỏ hàng trống hoặc không hợp lệ");
+            }
 
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                try
                 {
-                    _logger.LogWarning("Invalid user ID");
-                    return Unauthorized("Invalid user ID");
-                }
-
-                var user = await _context.Users.FindAsync(userId);
-                if (user == null)
-                {
-                    _logger.LogWarning($"User with ID {userId} not found");
-                    return NotFound($"User with ID {userId} not found");
-                }
-
-                // Create a new order
-                var newOrder = new Order
-                {
-                    UserId = userId,
-                    OrderStatus = "Pending",
-                    OrderDate = DateTime.Now,
-                    OrderItems = new List<OrderItem>()
-                };
-
-                decimal totalAmount = 0;
-                foreach (var cartItem in cartItems)
-                {
-                    var flower = await _context.Flowers.FindAsync(cartItem.FlowerId);
-                    if (flower == null)
+                    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                    if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
                     {
-                        return BadRequest($"Flower with ID {cartItem.FlowerId} not found");
+                        _logger.LogWarning("Invalid user ID: {ClaimValue}", userIdClaim?.Value);
+                        return Unauthorized("ID người dùng không hợp lệ");
                     }
 
-                    if (flower.Quantity < cartItem.Quantity)
+                    var user = await _context.Users.FindAsync(userId);
+                    if (user == null)
                     {
-                        return BadRequest($"Không đủ số lượng hoa: {flower.FlowerName}");
+                        _logger.LogWarning("User with ID {UserId} not found", userId);
+                        return NotFound($"Không tìm thấy người dùng với ID {userId}");
                     }
 
-                    flower.Quantity -= cartItem.Quantity;
-                    totalAmount += flower.Price * cartItem.Quantity;
-
-                    newOrder.OrderItems.Add(new OrderItem
+                    var newOrder = new Order
                     {
-                        FlowerId = flower.FlowerId,
-                        Quantity = cartItem.Quantity,
-                        Price = flower.Price
-                    });
+                        UserId = userId,
+                        OrderStatus = "Complete",
+                        OrderDate = DateTime.Now,
+                        DeliveryAddress = "Default Address", // You may want to get this from the user input
+                        OrderItems = new List<OrderItem>()
+                    };
+
+                    decimal totalAmount = 0;
+                    foreach (var cartItem in cartItems)
+                    {
+                        var flower = await _context.Flowers.FindAsync(cartItem.FlowerId);
+                        if (flower == null)
+                        {
+                            _logger.LogWarning("Flower not found: FlowerId={FlowerId}", cartItem.FlowerId);
+                            return BadRequest($"Không tìm thấy hoa với ID {cartItem.FlowerId}");
+                        }
+
+                        if (flower.Quantity < cartItem.Quantity)
+                        {
+                            _logger.LogWarning("Insufficient quantity for flower: FlowerId={FlowerId}, Available={Available}, Requested={Requested}",
+                                flower.FlowerId, flower.Quantity, cartItem.Quantity);
+                            return BadRequest($"Không đủ số lượng hoa: {flower.FlowerName}");
+                        }
+
+                        flower.Quantity -= cartItem.Quantity;
+                        totalAmount += flower.Price * cartItem.Quantity;
+
+                        newOrder.OrderItems.Add(new OrderItem
+                        {
+                            FlowerId = flower.FlowerId,
+                            Quantity = cartItem.Quantity,
+                            Price = flower.Price
+                        });
+                    }
+
+                    newOrder.TotalAmount = totalAmount;
+
+                    _context.Orders.Add(newOrder);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    _logger.LogInformation("Order created successfully: OrderId={OrderId}, TotalAmount={TotalAmount}", newOrder.OrderId, totalAmount);
+
+                    // Send confirmation email
+                    try
+                    {
+                        await SendConfirmationEmail(user, newOrder, totalAmount);
+                    }
+                    catch (Exception emailEx)
+                    {
+                        _logger.LogError(emailEx, "Error sending confirmation email");
+                        // Continue processing even if email sending fails
+                    }
+
+                    return Ok(new { message = "Đặt hàng thành công", orderId = newOrder.OrderId, totalAmount });
                 }
-
-                newOrder.TotalAmount = totalAmount;
-                newOrder.OrderStatus = "Thành công";
-
-                _context.Orders.Add(newOrder);
-                await _context.SaveChangesAsync();
-
-                // Send confirmation email
-                string emailSubject = "Đơn hàng của bạn đã được xác nhận";
-                string emailBody = $@"Xin chào {user.Name}, 
-                Đơn hàng của bạn đã được xác nhận thành công. 
-                Chi tiết đơn hàng: Mã đơn hàng: {newOrder.OrderId} 
-                Ngày đặt hàng: {newOrder.OrderDate:dd/MM/yyyy HH:mm} 
-                Tổng giá trị: {totalAmount:N0} VNĐ
-                Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
-                Trân trọng,
-                Đội ngũ hỗ trợ khách hàng";
-
-                await _emailSender.SendEmailAsync(user.Email, emailSubject, emailBody);
-
-                _logger.LogInformation($"Checkout thành công {newOrder.OrderId}");
-                return Ok(new { message = "Checkout thành công", orderId = newOrder.OrderId, totalAmount });
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    _logger.LogError(ex, "Unexpected error during checkout: {ErrorMessage}", ex.Message);
+                    if (ex.InnerException != null)
+                    {
+                        _logger.LogError("Inner exception: {InnerErrorMessage}", ex.InnerException.Message);
+                    }
+                    return StatusCode(500, $"Đã xảy ra lỗi không mong muốn: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Bị lỗi khi checkout");
-                return StatusCode(500, "Bị lỗi khi checkout");
-            }
+        }
+
+        private async Task SendConfirmationEmail(User user, Order order, decimal totalAmount)
+        {
+            string emailSubject = "Xác nhận đơn hàng";
+            string emailBody = $@"
+    Xin chào {user.Name},
+
+    Đơn hàng của bạn đã được xác nhận thành công.
+
+    Chi tiết đơn hàng:
+    - Mã đơn hàng: {order.OrderId}
+    - Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
+    - Tổng giá trị: {totalAmount:N0} VNĐ
+
+    Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
+
+    Trân trọng,
+    Đội ngũ hỗ trợ khách hàng";
+
+            await _emailSender.SendEmailAsync(user.Email, emailSubject, emailBody);
+            _logger.LogInformation("Confirmation email sent to {UserEmail}", user.Email);
         }
 
 
