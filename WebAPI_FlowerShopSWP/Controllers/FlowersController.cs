@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
@@ -31,12 +30,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Flower>>> GetFlowers()
         {
-            var flowers = await _context.Flowers.ToListAsync();
-            foreach (var flower in flowers)
-            {
-                _logger.LogInformation($"Flower ID: {flower.FlowerId}, Image URL: {flower.ImageUrl}");
-            }
-            return flowers;
+            return await _context.Flowers.ToListAsync();
         }
 
         [HttpGet("searchbyname")]
@@ -107,15 +101,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [Authorize]
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
-          [FromForm] string FlowerName,
-          [FromForm] decimal Price,
-          [FromForm] int Quantity,
-          [FromForm] int CategoryId,
-          [FromForm] IFormFile? image)
+     [FromForm] string FlowerName,
+     [FromForm] decimal Price,
+     [FromForm] int Quantity,
+     [FromForm] int CategoryId,
+     [FromForm] IFormFile? image)
         {
             try
             {
-                int userId = GetCurrentUserId();
+                int userId;
+                try
+                {
+                    userId = GetCurrentUserId();
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return Unauthorized("User not authenticated or session expired");
+                }
 
                 var flower = new Flower
                 {
@@ -129,19 +131,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     ListingDate = DateTime.UtcNow
                 };
 
-                if (image != null && image.Length > 0)
+                _logger.LogInformation($"Received flower data: {JsonSerializer.Serialize(flower)}");
+
+                if (image != null)
                 {
-                    var imageUrl = await SaveImageAsync(image);
-                    if (string.IsNullOrEmpty(imageUrl))
-                    {
-                        return BadRequest("Failed to save image.");
-                    }
-                    flower.ImageUrl = imageUrl;
-                    _logger.LogInformation($"Saved image URL: {flower.ImageUrl}");
-                }
-                else
-                {
-                    _logger.LogWarning("No image provided for flower.");
+                    flower.ImageUrl = await SaveImageAsync(image);
                 }
 
                 _context.Flowers.Add(flower);
@@ -169,9 +163,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         private async Task<string> SaveImageAsync(IFormFile image)
         {
-            if (image == null || image.Length == 0) return null;
+            if (image == null || image.Length == 0)
+            {
+                throw new ArgumentException("Invalid file");
+            }
 
             var uploadPath = Path.Combine(_webHostEnvironment.WebRootPath, "images");
+            if (!Directory.Exists(uploadPath))
+            {
+                Directory.CreateDirectory(uploadPath);
+            }
+
             var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
             var filePath = Path.Combine(uploadPath, fileName);
 
@@ -180,8 +182,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 await image.CopyToAsync(fileStream);
             }
 
-            _logger.LogInformation($"Image saved at: {filePath}");
-            return $"/images/{fileName}";
+            return "/images/" + fileName;
         }
 
         // DELETE: api/Flowers/5

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Configuration;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using WebAPI_FlowerShopSWP.Models;
+using WebAPI_FlowerShopSWP.Repository;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -21,11 +23,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
     {
         private readonly FlowerEventShopsContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IEmailSender _emailSender;
 
-        public UsersController(FlowerEventShopsContext context, IConfiguration configuration)
+        public UsersController(FlowerEventShopsContext context, IConfiguration configuration, IEmailSender emailSender)
         {
             _context = context;
             _configuration = configuration;
+            _emailSender = emailSender;
         }
 
         // GET: api/Users
@@ -261,6 +265,46 @@ namespace WebAPI_FlowerShopSWP.Controllers
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetUser", new { id = user.UserId }, user);
+        }
+
+        public class ForgotPasswordModel
+        {
+            [Required]
+            [EmailAddress]
+            public string Email { get; set; }
+        }
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == model.Email);
+            if (user == null)
+            {
+                // Không tiết lộ liệu email có tồn tại hay không
+                return Ok(new { message = "Nếu email tồn tại, bạn sẽ nhận được mật khẩu mới." });
+            }
+
+            // Tạo mật khẩu mới
+            string newPassword = GenerateRandomPassword();
+            user.Password = newPassword; // Lưu ý: Trong thực tế, bạn nên mã hóa mật khẩu
+
+            await _context.SaveChangesAsync();
+
+            // Gửi email với mật khẩu mới
+            await SendNewPasswordEmail(user.Email, newPassword);
+
+            return Ok(new { message = "Nếu email tồn tại, bạn sẽ nhận được mật khẩu mới." });
+        }
+
+        private string GenerateRandomPassword()
+        {
+            return Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+
+        private async Task SendNewPasswordEmail(string email, string newPassword)
+        {
+            string subject = "Mật khẩu mới cho tài khoản của bạn";
+            string message = $"Mật khẩu mới của bạn là: {newPassword}";
+            await _emailSender.SendEmailAsync(email, subject, message);
         }
 
         // DELETE: api/Users/5
