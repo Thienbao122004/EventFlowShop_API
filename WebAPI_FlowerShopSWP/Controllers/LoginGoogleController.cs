@@ -4,9 +4,11 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Google.Apis.Auth;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Oauth2.v2;
+using Google.Apis.Oauth2.v2.Data;
+using Google.Apis.Services;
 using WebAPI_FlowerShopSWP.Models;
-using System.Text.Json;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -28,7 +30,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public class GoogleLoginRequest
         {
             public string? AccessToken { get; set; }
-            public string? IdToken { get; set; }
         }
 
         [HttpPost("google-login")]
@@ -36,40 +37,88 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             try
             {
-                _logger.LogInformation($"Received access token: {request.AccessToken}");
-                _logger.LogInformation($"Received ID token: {request.IdToken}");
-
-                // Validate the ID token
-                var validationSettings = new GoogleJsonWebSignature.ValidationSettings()
+                if (string.IsNullOrEmpty(request.AccessToken))
                 {
-                    Audience = new[] { _configuration["Authentication:Google:ClientId"] }
-                };
-                var payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, validationSettings);
+                    return BadRequest("Access token is required");
+                }
+                _logger.LogInformation($"Received Access token: {request.AccessToken}");
 
-                // Find or create user
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
+                // Validate the access token and get user info
+                var userInfoClient = new Oauth2Service(new BaseClientService.Initializer
+                {
+                    HttpClientInitializer = GoogleCredential.FromAccessToken(request.AccessToken)
+                });
+                var userInfo = await userInfoClient.Userinfo.Get().ExecuteAsync();
+
+                // Find user
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userInfo.Email);
+
                 if (user == null)
                 {
-                    user = new User
+                    // User không tồn tại, trả về thông tin để frontend xử lý
+                    return Ok(new
                     {
-                        Email = payload.Email,
-                        Name = payload.Name,
-                        // Set other properties as needed
-                    };
-                    _context.Users.Add(user);
-                    await _context.SaveChangesAsync();
+                        IsNewUser = true,
+                        Email = userInfo.Email,
+                        Name = userInfo.Name
+                    });
                 }
 
-                // Generate JWT token
+                // User đã tồn tại, tạo token và trả về như bình thường
                 var token = GenerateJwtToken(user);
-
-                return Ok(new { Token = token, User = new { user.UserId, user.Name, user.Email } });
+                return Ok(new
+                {
+                    IsNewUser = false,
+                    Token = token,
+                    User = new { user.UserId, user.Name, user.Email, user.UserType }
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during Google authentication");
                 return StatusCode(500, $"An error occurred during authentication: {ex.Message}");
             }
+        }
+
+        [HttpPost("complete-registration")]
+        public async Task<IActionResult> CompleteRegistration([FromBody] CompleteRegistrationRequest request)
+        {
+            try
+            {
+                var user = new User
+                {
+                    Email = request.Email,
+                    FullName = request.FullName, // Sử dụng FullName thay vì Name
+                    Name = request.Email.Split('@')[0], // Tạo username từ email
+                    UserType = "Buyer",
+                    Phone = request.Phone,
+                    Address = request.Address,
+                    RegistrationDate = DateTime.UtcNow,
+                    Password = null // Đảm bảo password là null cho người dùng đăng nhập bằng Google
+                };
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+
+                var token = GenerateJwtToken(user);
+                return Ok(new
+                {
+                    Token = token,
+                    User = new { user.UserId, user.FullName, user.Name, user.Email, user.UserType }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during user registration");
+                return StatusCode(500, $"An error occurred during registration: {ex.Message}");
+            }
+        }
+
+        public class CompleteRegistrationRequest
+        {
+            public string Email { get; set; }
+            public string FullName { get; set; }
+            public string Phone { get; set; }
+            public string Address { get; set; }
         }
 
         private string GenerateJwtToken(User user)
@@ -80,10 +129,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-            new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Name)
-        }),
+                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                    new Claim(ClaimTypes.Email, user.Email),
+                    new Claim(ClaimTypes.Name, user.Name),
+                    //new Claim(ClaimTypes.Role, user.Role)
+                }),
                 Expires = DateTime.UtcNow.AddDays(7),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
@@ -91,4 +141,4 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return tokenHandler.WriteToken(token);
         }
     }
-    }
+}

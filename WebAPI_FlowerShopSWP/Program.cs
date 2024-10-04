@@ -9,10 +9,10 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
+using WebAPI_FlowerShopSWP.Controllers;
 using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.Repository;
-using WebAPI_FlowerShopSWP.Hubs;
-using Microsoft.AspNetCore.SignalR;
+using WebAPI_FlowerShopSWP.Configurations;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -35,9 +35,6 @@ namespace WebAPI_FlowerShopSWP
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
-            // Configure
-
-            // Add Email
             builder.Services.AddTransient<IEmailSender, EmailSender>();
 
             builder.Services.AddCors(options =>
@@ -45,7 +42,7 @@ namespace WebAPI_FlowerShopSWP
                 options.AddPolicy("AllowSpecificOrigin",
                     builder =>
                     {
-                        builder.WithOrigins("http://localhost:5173", "http://localhost:5174") // Your frontend URL
+                        builder.WithOrigins("http://localhost:5173", "http://localhost:5174")
                                .AllowAnyHeader()
                                .AllowAnyMethod()
                                .AllowCredentials()
@@ -55,9 +52,17 @@ namespace WebAPI_FlowerShopSWP
             });
 
             builder.Services.AddControllers();
-            builder.Services.AddSignalR();
-
+            builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
             builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSingleton<VNPayConfig>(sp =>
+            {
+                return new VNPayConfig
+                {
+                    TmnCode = builder.Configuration["VNPayConfig:TmnCode"],
+                    HashSecret = builder.Configuration["VNPayConfig:HashSecret"],
+                    Url = builder.Configuration["VNPayConfig:Url"]
+                };
+            });
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Flower Shop API", Version = "v1" });
@@ -120,7 +125,6 @@ namespace WebAPI_FlowerShopSWP
             {
                 googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
                 googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-                googleOptions.CallbackPath = "/api/LoginGoogle/google-callback";
             });
 
             // Configure authorization policies
@@ -130,6 +134,7 @@ namespace WebAPI_FlowerShopSWP
                 options.AddPolicy("BuyerSellerOnly", policy => policy.RequireRole("Buyer", "Seller"));
             });
             builder.Services.AddSingleton<IWebHostEnvironment>(builder.Environment);
+
 
             var app = builder.Build();
             app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
@@ -146,7 +151,11 @@ namespace WebAPI_FlowerShopSWP
 
             // Use CORS before routing and authorization
             app.UseCors("AllowSpecificOrigin");
-
+            app.Use(async (context, next) =>
+            {
+                context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+                await next();
+            });
             app.UseRouting();
 
             app.UseAuthentication();
@@ -156,10 +165,9 @@ namespace WebAPI_FlowerShopSWP
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(
-                    Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")),
+        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")),
                 RequestPath = ""
             });
-            app.MapHub<ChatHub>("/chatHub");
             app.Run();
         }
     }

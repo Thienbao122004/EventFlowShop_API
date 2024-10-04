@@ -205,5 +205,50 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             return _context.Flowers.Any(e => e.FlowerId == id);
         }
+
+        [HttpPost("{flowerId}/reviews")]
+        public async Task<ActionResult<Review>> PostReview(int flowerId, [FromBody] Review review)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var flower = await _context.Flowers.FindAsync(flowerId);
+            if (flower == null)
+            {
+                return NotFound("Flower not found.");
+            }
+
+            review.FlowerId = flowerId;
+            review.ReviewDate = DateTime.UtcNow;
+
+            _context.Reviews.Add(review);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction("GetReview", new { id = review.ReviewId }, review);
+        }
+
+        [HttpGet("{flowerId}/reviews")]
+        public async Task<ActionResult<IEnumerable<Review>>> GetReviews(int flowerId)
+        {
+            var reviews = await _context.Reviews.Where(r => r.FlowerId == flowerId).ToListAsync();
+            if (!reviews.Any())
+            {
+                return NotFound("No reviews found for this flower.");
+            }
+
+            return reviews;
+        }
+
+        [HttpGet("{flowerId}/canReview")]
+        public async Task<ActionResult<bool>> CanReview(int flowerId)
+        {
+            int userId = GetCurrentUserId();
+            var hasPurchased = await _context.Orders
+                .AnyAsync(o => o.UserId == userId && o.OrderItems.Any(oi => oi.FlowerId == flowerId));
+
+            return Ok(hasPurchased);
+        }
     }
 }

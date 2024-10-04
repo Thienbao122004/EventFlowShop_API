@@ -120,7 +120,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     break;
                 // Thêm các trường hợp khác nếu cần
                 default:
-                    claims.Add(new Claim(ClaimTypes.Role, "User"));
+                    claims.Add(new Claim(ClaimTypes.Role, "Buyer"));
                     break;
             }
 

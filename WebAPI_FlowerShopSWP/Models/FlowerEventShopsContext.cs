@@ -39,7 +39,6 @@ public partial class FlowerEventShopsContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R\\SQLEXPRESS;Initial Catalog=FlowerEventShops;Integrated Security=True;Encrypt=True;Trust Server Certificate=True");
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Category>(entity =>
@@ -313,6 +312,9 @@ public partial class FlowerEventShopsContext : DbContext
             entity.Property(e => e.Email)
                 .HasMaxLength(100)
                 .HasColumnName("email");
+            entity.Property(e => e.FullName)
+                .HasMaxLength(100)
+                .HasColumnName("fullName");
             entity.Property(e => e.Name)
                 .HasMaxLength(100)
                 .HasColumnName("name");
