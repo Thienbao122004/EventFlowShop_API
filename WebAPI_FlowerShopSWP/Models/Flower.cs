@@ -2,11 +2,16 @@
 using Shopping.Repository.Validation;
 using System;
 using System.Collections.Generic;
+<<<<<<< HEAD
 
 using System.Text.Json.Serialization;
 
 using System.ComponentModel.DataAnnotations.Schema;
 
+
+
+using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
