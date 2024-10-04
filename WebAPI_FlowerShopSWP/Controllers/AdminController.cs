@@ -90,20 +90,20 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
         }
 
-        // Update flower status
-        [HttpPut("flowers/{id}")]
-        public async Task<IActionResult> UpdateFlowerStatus(int id, Flower updatedFlower)
-        {
-            var flower = await _context.Flowers.FindAsync(id);
-            if (flower == null)
-            {
-                return NotFound();
-            }
+        //// Update flower status
+        //[HttpPut("flowers/{id}")]
+        //public async Task<IActionResult> UpdateFlowerStatus(int id, Flower updatedFlower)
+        //{
+        //    var flower = await _context.Flowers.FindAsync(id);
+        //    if (flower == null)
+        //    {
+        //        return NotFound();
+        //    }
 
-            flower.Status = updatedFlower.Status;
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
+        //    flower.Status = updatedFlower.Status;
+        //    await _context.SaveChangesAsync();
+        //    return NoContent();
+        //}
         // cập nhật role của người dùng 
         [HttpPut("users/{id}/role")]
         public async Task<IActionResult> UpdateUserRole(int id, [FromBody] string newRole)
@@ -131,5 +131,58 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(orders);
         }
+        // Xóa hoa
+        [HttpDelete("flowers/{id}")]
+        public async Task<IActionResult> DeleteFlower(int id)
+        {
+            var flower = await _context.Flowers.FindAsync(id);
+            if (flower == null)
+            {
+                return NotFound();
+            }
+
+            _context.Flowers.Remove(flower);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+        // Cập nhật thông tin người dùng
+        [HttpPut("users/{id}")]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] User updatedUser)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            user.Name = updatedUser.Name;
+            user.Email = updatedUser.Email;
+            user.UserType = updatedUser.UserType;
+            user.Phone = updatedUser.Phone;
+            user.Address = updatedUser.Address;
+
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+        // Cập nhật thông tin hoa
+        [HttpPut("flowers/{id}")]
+        public async Task<IActionResult> UpdateFlower(int id, [FromBody] Flower updatedFlower)
+        {
+            var flower = await _context.Flowers.FindAsync(id);
+            if (flower == null)
+            {
+                return NotFound();
+            }
+
+            flower.FlowerName = updatedFlower.FlowerName;
+            flower.Quantity = updatedFlower.Quantity;
+            flower.Status = updatedFlower.Status;
+
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+
     }
 }
