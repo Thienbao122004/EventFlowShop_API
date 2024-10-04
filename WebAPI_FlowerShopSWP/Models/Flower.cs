@@ -2,12 +2,8 @@
 using Shopping.Repository.Validation;
 using System;
 using System.Collections.Generic;
-<<<<<<< HEAD
 using System.Text.Json.Serialization;
-=======
 using System.ComponentModel.DataAnnotations.Schema;
->>>>>>> 191ef86e8b5fd800c38c3a8db5132af426cb8c6b
-
 namespace WebAPI_FlowerShopSWP.Models;
 
 public partial class Flower

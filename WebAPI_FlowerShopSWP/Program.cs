@@ -52,12 +52,7 @@ namespace WebAPI_FlowerShopSWP
             });
 
             builder.Services.AddControllers();
-<<<<<<< HEAD
             builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
-=======
-            
-
->>>>>>> d9d73a95b56d50efd53f0c0b8734a0e784dc8ec4
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSingleton<VNPayConfig>(sp =>
             {
