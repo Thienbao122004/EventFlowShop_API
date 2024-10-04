@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
@@ -31,12 +30,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Flower>>> GetFlowers()
         {
-            var flowers = await _context.Flowers.ToListAsync();
-            foreach (var flower in flowers)
-            {
-                _logger.LogInformation($"Flower ID: {flower.FlowerId}, Image URL: {flower.ImageUrl}");
-            }
-            return flowers;
+            return await _context.Flowers.ToListAsync();
         }
 
         [HttpGet("searchbyname")]
@@ -107,15 +101,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [Authorize]
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
-          [FromForm] string FlowerName,
-          [FromForm] decimal Price,
-          [FromForm] int Quantity,
-          [FromForm] int CategoryId,
-          [FromForm] IFormFile? image)
+     [FromForm] string FlowerName,
+     [FromForm] decimal Price,
+     [FromForm] int Quantity,
+     [FromForm] int CategoryId,
+     [FromForm] IFormFile? image)
         {
             try
             {
-                int userId = GetCurrentUserId();
+                int userId;
+                try
+                {
+                    userId = GetCurrentUserId();
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return Unauthorized("User not authenticated or session expired");
+                }
 
                 var flower = new Flower
                 {
@@ -129,19 +131,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     ListingDate = DateTime.UtcNow
                 };
 
-                if (image != null && image.Length > 0)
+                _logger.LogInformation($"Received flower data: {JsonSerializer.Serialize(flower)}");
+
+                if (image != null)
                 {
-                    var imageUrl = await SaveImageAsync(image);
-                    if (string.IsNullOrEmpty(imageUrl))
-                    {
-                        return BadRequest("Failed to save image.");
-                    }
-                    flower.ImageUrl = imageUrl;
-                    _logger.LogInformation($"Saved image URL: {flower.ImageUrl}");
-                }
-                else
-                {
-                    _logger.LogWarning("No image provided for flower.");
+                    flower.ImageUrl = await SaveImageAsync(image);
                 }
 
                 _context.Flowers.Add(flower);
@@ -169,9 +163,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         private async Task<string> SaveImageAsync(IFormFile image)
         {
-            if (image == null || image.Length == 0) return null;
+            if (image == null || image.Length == 0)
+            {
+                throw new ArgumentException("Invalid file");
+            }
 
             var uploadPath = Path.Combine(_webHostEnvironment.WebRootPath, "images");
+            if (!Directory.Exists(uploadPath))
+            {
+                Directory.CreateDirectory(uploadPath);
+            }
+
             var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
             var filePath = Path.Combine(uploadPath, fileName);
 
@@ -180,8 +182,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 await image.CopyToAsync(fileStream);
             }
 
-            _logger.LogInformation($"Image saved at: {filePath}");
-            return $"/images/{fileName}";
+            return "/images/" + fileName;
         }
 
         // DELETE: api/Flowers/5
@@ -203,6 +204,51 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private bool FlowerExists(int id)
         {
             return _context.Flowers.Any(e => e.FlowerId == id);
+        }
+
+        [HttpPost("{flowerId}/reviews")]
+        public async Task<ActionResult<Review>> PostReview(int flowerId, [FromBody] Review review)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var flower = await _context.Flowers.FindAsync(flowerId);
+            if (flower == null)
+            {
+                return NotFound("Flower not found.");
+            }
+
+            review.FlowerId = flowerId;
+            review.ReviewDate = DateTime.UtcNow;
+
+            _context.Reviews.Add(review);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction("GetReview", new { id = review.ReviewId }, review);
+        }
+
+        [HttpGet("{flowerId}/reviews")]
+        public async Task<ActionResult<IEnumerable<Review>>> GetReviews(int flowerId)
+        {
+            var reviews = await _context.Reviews.Where(r => r.FlowerId == flowerId).ToListAsync();
+            if (!reviews.Any())
+            {
+                return NotFound("No reviews found for this flower.");
+            }
+
+            return reviews;
+        }
+
+        [HttpGet("{flowerId}/canReview")]
+        public async Task<ActionResult<bool>> CanReview(int flowerId)
+        {
+            int userId = GetCurrentUserId();
+            var hasPurchased = await _context.Orders
+                .AnyAsync(o => o.UserId == userId && o.OrderItems.Any(oi => oi.FlowerId == flowerId));
+
+            return Ok(hasPurchased);
         }
     }
 }
