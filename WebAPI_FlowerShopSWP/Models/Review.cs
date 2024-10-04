@@ -17,7 +17,7 @@ public partial class Review
 
     public DateTime? ReviewDate { get; set; }
 
-    public virtual Flower Flower { get; set; } = null!;
+    public virtual Flower? Flower { get; set; } = null!;
 
-    public virtual User User { get; set; } = null!;
+    public virtual User? User { get; set; } = null!;
 }

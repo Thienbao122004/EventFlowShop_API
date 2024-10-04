@@ -11,6 +11,8 @@ using System.Text;
 using System.Text.Json.Serialization;
 using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.Repository;
+using WebAPI_FlowerShopSWP.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -34,9 +36,8 @@ namespace WebAPI_FlowerShopSWP
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
             // Configure
-            
-            // 
-            //Add Email
+
+            // Add Email
             builder.Services.AddTransient<IEmailSender, EmailSender>();
 
             builder.Services.AddCors(options =>
@@ -53,15 +54,9 @@ namespace WebAPI_FlowerShopSWP
                     });
             });
 
-            builder.Services.AddControllers()
-                .AddJsonOptions(options =>
-                {
-                    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
-                    options.JsonSerializerOptions.MaxDepth = 64; 
-                });
-                    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
-                    options.JsonSerializerOptions.MaxDepth = 64; 
-                });
+            builder.Services.AddControllers();
+            builder.Services.AddSignalR();
+
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
@@ -136,7 +131,6 @@ namespace WebAPI_FlowerShopSWP
             });
             builder.Services.AddSingleton<IWebHostEnvironment>(builder.Environment);
 
-
             var app = builder.Build();
             app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 
@@ -162,9 +156,10 @@ namespace WebAPI_FlowerShopSWP
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(
-        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")),
+                    Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")),
                 RequestPath = ""
             });
+            app.MapHub<ChatHub>("/chatHub");
             app.Run();
         }
     }
