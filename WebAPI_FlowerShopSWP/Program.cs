@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -50,7 +52,12 @@ namespace WebAPI_FlowerShopSWP
             });
 
             builder.Services.AddControllers();
+<<<<<<< HEAD
             builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
+=======
+            
+
+>>>>>>> d9d73a95b56d50efd53f0c0b8734a0e784dc8ec4
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSingleton<VNPayConfig>(sp =>
             {
