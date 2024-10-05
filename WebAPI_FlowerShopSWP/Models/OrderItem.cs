@@ -11,6 +11,8 @@ public partial class OrderItem
 
     public int FlowerId { get; set; }
 
+    public string FlowerName { get; set; } = null!;
+
     public int Quantity { get; set; }
 
     public decimal Price { get; set; }
