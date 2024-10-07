@@ -21,15 +21,15 @@ public partial class Order
     [Column(TypeName = "decimal(18,2)")]
     public decimal? TotalAmount { get; set; }
 
-  
+    [JsonIgnore]
     public virtual User User { get; set; } = null!;
 
-    
+    [JsonIgnore]
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
 
-    
+    [JsonIgnore]
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 
-    
+    [JsonIgnore]
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
