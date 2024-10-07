@@ -106,36 +106,20 @@ namespace WebAPI_FlowerShopSWP.Controllers
             var claims = new List<Claim>
     {
         new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-        new Claim(ClaimTypes.Name, user.Name)
+        new Claim(ClaimTypes.Name, user.Name),
+        new Claim(ClaimTypes.Role, user.UserType)  // Sử dụng UserType trực tiếp
     };
-
-            // Thêm vai trò vào claims dựa trên UserType
-            switch (user.UserType)
-            {
-                case "Admin":
-                    claims.Add(new Claim(ClaimTypes.Role, "Admin"));
-                    break;
-                case "Seller":
-                    claims.Add(new Claim(ClaimTypes.Role, "Seller"));
-                    break;
-                // Thêm các trường hợp khác nếu cần
-                default:
-                    claims.Add(new Claim(ClaimTypes.Role, "Buyer"));
-                    break;
-            }
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Expires = DateTime.UtcNow.AddDays(7),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
 
-            // Trả về token và UserType cho client
-            return Ok(new { Token = tokenString, user.UserType });
+            return Ok(new { token = tokenHandler.WriteToken(token), userType = user.UserType });
         }
 
 

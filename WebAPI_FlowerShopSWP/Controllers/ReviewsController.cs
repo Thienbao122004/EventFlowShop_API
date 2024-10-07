@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -41,8 +42,29 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return review;
         }
 
+        [HttpGet("flower/{flowerId}")]
+        public async Task<ActionResult<IEnumerable<object>>> GetReviewsByFlowerId(int flowerId)
+        {
+            var reviews = await _context.Reviews
+                .Where(r => r.FlowerId == flowerId)
+                .Include(r => r.User)
+                .OrderByDescending(r => r.ReviewDate)
+                .Select(r => new
+                {
+                    r.ReviewId,
+                    r.UserId,
+                    UserName = r.User.FullName, 
+                    r.FlowerId,
+                    r.Rating,
+                    r.ReviewComment,
+                    r.ReviewDate
+                })
+                .ToListAsync();
+
+            return reviews;
+        }
+
         // PUT: api/Reviews/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
         public async Task<IActionResult> PutReview(int id, Review review)
         {
@@ -72,15 +94,40 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return NoContent();
         }
 
-        // POST: api/Reviews
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Review>> PostReview(Review review)
+        public async Task<ActionResult<object>> PostReview(Review review)
         {
+            review.ReviewDate = DateTime.Now;
             _context.Reviews.Add(review);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetReview", new { id = review.ReviewId }, review);
+            var user = await _context.Users.FindAsync(review.UserId);
+            var reviewWithUserName = new
+            {
+                review.ReviewId,
+                review.UserId,
+                UserName = user.FullName,
+                review.FlowerId,
+                review.Rating,
+                review.ReviewComment,
+                review.ReviewDate
+            };
+
+            return CreatedAtAction("GetReview", new { id = review.ReviewId }, reviewWithUserName);
+        }
+
+        private async Task<bool> HasUserPurchasedFlower(int userId, int flowerId)
+        {
+            return await _context.OrderItems
+                .AnyAsync(od => od.Order.UserId == userId && od.FlowerId == flowerId && od.Order.OrderStatus == "Completed");
+        }
+
+        [HttpGet("canReview/{flowerId}")]
+        public async Task<ActionResult<bool>> CanUserReview(int flowerId)
+        {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var canReview = await HasUserPurchasedFlower(userId, flowerId);
+            return Ok(canReview);
         }
 
         // DELETE: api/Reviews/5
@@ -104,4 +151,4 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return _context.Reviews.Any(e => e.ReviewId == id);
         }
     }
-}
+}  

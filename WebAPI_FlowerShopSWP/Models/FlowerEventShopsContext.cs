@@ -212,7 +212,6 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasMaxLength(20)
                 .HasColumnName("orderStatus");
 
-            // Thêm cấu hình cho trường totalAmount
             entity.Property(e => e.TotalAmount)
                 .HasColumnType("decimal(18, 2)")
                 .HasColumnName("totalAmount")
@@ -237,7 +236,9 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("price");
             entity.Property(e => e.Quantity).HasColumnName("quantity");
-
+            entity.Property(e => e.FlowerName)
+                .HasColumnName("flowerName")
+                .HasMaxLength(255); 
             entity.HasOne(d => d.Flower).WithMany(p => p.OrderItems)
                 .HasForeignKey(d => d.FlowerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
