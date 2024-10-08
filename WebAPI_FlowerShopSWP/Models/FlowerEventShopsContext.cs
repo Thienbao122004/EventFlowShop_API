@@ -38,7 +38,7 @@ public partial class FlowerEventShopsContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R\\SQLEXPRESS;Initial Catalog=FlowerEventShops;Integrated Security=True;Encrypt=True;Trust Server Certificate=True");
+        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-RQ7RDFN3\\ADMIN;Initial Catalog=FlowerEventShops;Integrated Security=True;Encrypt=True;Trust Server Certificate=True");
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Category>(entity =>

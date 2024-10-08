@@ -23,6 +23,8 @@ public partial class User
 
     public DateTime? RegistrationDate { get; set; }
 
+    public string? ProfileImageUrl { get; set; }
+
     public virtual ICollection<Conversation> ConversationBuyers { get; set; } = new List<Conversation>();
 
     public virtual ICollection<Conversation> ConversationSellers { get; set; } = new List<Conversation>();

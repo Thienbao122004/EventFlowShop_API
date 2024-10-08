@@ -218,8 +218,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             user.Name = updatedUser.Name;
             user.Email = updatedUser.Email;
+            user.FullName = updatedUser.FullName;
             user.Phone = updatedUser.Phone;
             user.Address = updatedUser.Address;
+            user.ProfileImageUrl = updatedUser.ProfileImageUrl;
+            
+            if (!string.IsNullOrEmpty(updatedUser.ProfileImageUrl))
+            {
+                user.ProfileImageUrl = updatedUser.ProfileImageUrl;
+            }
 
             try
             {
@@ -239,6 +246,39 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(user);
         }
+        [Authorize]
+        [HttpPost("upload-profile-image")]
+        public async Task<IActionResult> UploadProfileImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("Không có tệp nào được tải lên.");
+            }
+
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var user = await _context.Users.FindAsync(userId);
+
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            
+            var filePath = Path.Combine("wwwroot/images/profile", file.FileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            
+            user.ProfileImageUrl = $"/images/profile/{file.FileName}";
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { profileImageUrl = user.ProfileImageUrl });
+        }
+
 
         // POST: api/Users
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
