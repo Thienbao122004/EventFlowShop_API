@@ -86,37 +86,33 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
         // PUT: api/Flowers/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, Flower flower)
+        public async Task<IActionResult> PutFlower(int id, [FromBody] Flower updatedFlower, [FromForm] IFormFile? image)
         {
-            if (id != flower.FlowerId)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(flower).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!FlowerExists(id))
+                var flower = await _context.Flowers.FindAsync(id);
+                if (flower == null)
                 {
                     return NotFound();
                 }
-                else
+
+                flower.FlowerName = updatedFlower.FlowerName;
+                flower.Category = updatedFlower.Category;
+                flower.Price= updatedFlower.Price;
+                flower.Quantity = updatedFlower.Quantity;
+                flower.Condition = updatedFlower.Condition;
+                flower.Status = updatedFlower.Status;
+                // Nếu có hình ảnh mới, lưu hình ảnh và cập nhật URL
+                if (image != null)
                 {
-                    throw;
+                    flower.ImageUrl = await SaveImageAsync(image);
                 }
+
+
+            await _context.SaveChangesAsync();
+                return NoContent();
             }
 
-            return NoContent();
-        }
-
-        [Authorize]
+            [Authorize]
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
      [FromForm] string FlowerName,
@@ -298,6 +294,19 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(flowers); // Trả về danh sách hoa
         }
+        [HttpGet]
+        [Route("categories")]
+        public IActionResult GetCategories()
+        {
+            
+            var categories = _context.Categories
+                .Select(c => new { c.CategoryName }) 
+                .ToList();
+
+            return Ok(categories); 
+        }
+
+
 
     }
 }
