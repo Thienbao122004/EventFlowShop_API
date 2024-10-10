@@ -31,7 +31,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _configuration = configuration;
             _emailSender = emailSender;
         }
-
         // GET: api/Users
         [HttpGet]
         public async Task<ActionResult<IEnumerable<User>>> GetUsers()
@@ -89,7 +88,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         // POST: api/Users/login
         [HttpPost("login")]
-        public async Task<ActionResult<User>> Login([FromBody] User loginUser)
+        public async Task<ActionResult<object>> Login([FromBody] User loginUser)
         {
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Name == loginUser.Name && u.Password == loginUser.Password);
@@ -100,8 +99,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
             // Tạo token
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
+            var tokenHandler = new JwtSecurityTokenHandler(); var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
 
             var claims = new List<Claim>
     {
@@ -218,8 +216,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             user.Name = updatedUser.Name;
             user.Email = updatedUser.Email;
+            user.FullName = updatedUser.FullName;
             user.Phone = updatedUser.Phone;
             user.Address = updatedUser.Address;
+            //user.ProfileImageUrl = updatedUser.ProfileImageUrl;
+
+            //if (!string.IsNullOrEmpty(updatedUser.ProfileImageUrl))
+            //{
+            //    user.ProfileImageUrl = updatedUser.ProfileImageUrl;
+            //}
 
             try
             {
@@ -239,9 +244,51 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(user);
         }
+        //[Authorize]
+        //[HttpPost("upload-profile-image")]
+        //public async Task<IActionResult> UploadProfileImage(IFormFile file)
+        //{
+        //    if (file == null || file.Length == 0)
+        //    {
+        //        return BadRequest("No file uploaded.");
+        //    }
+
+
+        //    var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "PersistentImages", "profile");
+
+
+        //    if (!Directory.Exists(uploadsFolderPath))
+        //    {
+        //        Directory.CreateDirectory(uploadsFolderPath);
+        //    }
+
+
+        //    var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+
+
+        //    var filePath = Path.Combine(uploadsFolderPath, uniqueFileName);
+
+        //    using (var stream = new FileStream(filePath, FileMode.Create))
+        //    {
+        //        await file.CopyToAsync(stream);
+        //    }
+
+
+        //    var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+        //    var user = await _context.Users.FindAsync(userId);
+
+        //    if (user == null)
+        //    {
+        //        return NotFound("User not found.");
+        //    }
+
+        //    user.ProfileImageUrl = "/images/profile/" + uniqueFileName;
+        //    await _context.SaveChangesAsync();
+
+        //    return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
+        //}
 
         // POST: api/Users
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
         public async Task<ActionResult<User>> PostUser(User user)
         {
@@ -310,6 +357,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private bool UserExists(int id)
         {
             return _context.Users.Any(e => e.UserId == id);
+        }
+        [HttpGet("current-user")]
+        [Authorize] // Chỉ cho phép người đã đăng nhập
+        public ActionResult<User> GetCurrentUser()
+        {
+            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(userIdString, out int userId))
+            {
+                var user = _context.Users.Find(userId); // Tìm người dùng dựa trên userId kiểu int
+                if (user == null)
+                {
+                    return NotFound();
+                }
+                return Ok(user);
+            }
+            return BadRequest("Invalid user ID");
+
         }
     }
 }

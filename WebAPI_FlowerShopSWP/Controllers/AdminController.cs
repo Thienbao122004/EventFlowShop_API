@@ -49,10 +49,10 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 // Bước 2: Xóa OrderItems và Payments liên quan đến các đơn hàng
                 foreach (var order in orders)
                 {
-                    
+
                     _context.OrderItems.RemoveRange(order.OrderItems);
 
-                    
+
                     _context.Payments.RemoveRange(order.Payments);
                 }
 
@@ -156,11 +156,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            user.Name = updatedUser.Name ?? user.Name; 
-            user.Email = updatedUser.Email ?? user.Email; 
-            user.UserType = updatedUser.UserType ?? user.UserType; 
-            user.Phone = updatedUser.Phone ?? user.Phone; 
-            user.Address = updatedUser.Address ?? user.Address; 
+            user.Name = updatedUser.Name ?? user.Name;
+            user.Email = updatedUser.Email ?? user.Email;
+            user.UserType = updatedUser.UserType ?? user.UserType;
+            user.Phone = updatedUser.Phone ?? user.Phone;
+            user.Address = updatedUser.Address ?? user.Address;
 
             // Cập nhật mật khẩu chỉ khi nó không phải là null hoặc trống
             if (!string.IsNullOrWhiteSpace(updatedUser.Password))
@@ -269,13 +269,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             var totalOrders = await _context.Orders.CountAsync();
             var totalIncome = await _context.OrderItems.SumAsync(item => item.Price * item.Quantity);
-            var totalProducts = await _context.Flowers.CountAsync(); 
+            var totalProducts = await _context.Flowers.CountAsync();
 
             var stats = new
             {
                 TotalOrders = totalOrders,
                 TotalIncome = totalIncome,
-                TotalProducts = totalProducts 
+                TotalProducts = totalProducts
             };
 
             return Ok(stats);
@@ -284,12 +284,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public async Task<IActionResult> GetDailyIncome()
         {
             var dailyIncome = await _context.Orders
-                .Where(o => o.OrderDate.HasValue) 
-                .GroupBy(o => o.OrderDate.Value.Date) 
+                .Where(o => o.OrderDate.HasValue)
+                .GroupBy(o => o.OrderDate.Value.Date)
                 .Select(g => new
                 {
                     Date = g.Key,
-                    Income = g.SelectMany(o => o.OrderItems) 
+                    Income = g.SelectMany(o => o.OrderItems)
                                .Sum(item => item.Price * item.Quantity) // Tính tổng thu nhập từ các OrderItems
                 })
                 .ToListAsync();

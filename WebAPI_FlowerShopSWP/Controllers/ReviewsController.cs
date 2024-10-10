@@ -42,38 +42,57 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return review;
         }
 
-        [HttpGet("flower/{flowerId}")]
-        public async Task<ActionResult<IEnumerable<object>>> GetReviewsByFlowerId(int flowerId)
+        [HttpPost]
+        public async Task<ActionResult<object>> PostReview(Review review)
         {
-            var reviews = await _context.Reviews
-                .Where(r => r.FlowerId == flowerId)
-                .Include(r => r.User)
-                .OrderByDescending(r => r.ReviewDate)
-                .Select(r => new
-                {
-                    r.ReviewId,
-                    r.UserId,
-                    UserName = r.User.FullName, 
-                    r.FlowerId,
-                    r.Rating,
-                    r.ReviewComment,
-                    r.ReviewDate
-                })
-                .ToListAsync();
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var existingReview = await _context.Reviews
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.FlowerId == review.FlowerId);
 
-            return reviews;
+            if (existingReview != null)
+            {
+                return BadRequest("You have already reviewed this product. Please edit your existing review.");
+            }
+
+            review.UserId = userId;
+            review.ReviewDate = DateTime.Now;
+            _context.Reviews.Add(review);
+            await _context.SaveChangesAsync();
+
+            var user = await _context.Users.FindAsync(review.UserId);
+            var reviewWithUserName = new
+            {
+                review.ReviewId,
+                review.UserId,
+                UserName = user.FullName,
+                review.FlowerId,
+                review.Rating,
+                review.ReviewComment,
+                review.ReviewDate
+            };
+
+            return CreatedAtAction("GetReview", new { id = review.ReviewId }, reviewWithUserName);
         }
 
-        // PUT: api/Reviews/5
         [HttpPut("{id}")]
         public async Task<IActionResult> PutReview(int id, Review review)
         {
-            if (id != review.ReviewId)
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var existingReview = await _context.Reviews.FindAsync(id);
+
+            if (existingReview == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            _context.Entry(review).State = EntityState.Modified;
+            if (existingReview.UserId != userId)
+            {
+                return Forbid();
+            }
+
+            existingReview.Rating = review.Rating;
+            existingReview.ReviewComment = review.ReviewComment;
+            existingReview.ReviewDate = DateTime.Now;
 
             try
             {
@@ -94,26 +113,34 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return NoContent();
         }
 
-        [HttpPost]
-        public async Task<ActionResult<object>> PostReview(Review review)
+        [HttpGet("flower/{flowerId}")]
+        public async Task<ActionResult<object>> GetReviewsByFlowerId(int flowerId)
         {
-            review.ReviewDate = DateTime.Now;
-            _context.Reviews.Add(review);
-            await _context.SaveChangesAsync();
+            var reviews = await _context.Reviews
+                .Where(r => r.FlowerId == flowerId)
+                .Include(r => r.User)
+                .OrderByDescending(r => r.ReviewDate)
+                .Select(r => new
+                {
+                    r.ReviewId,
+                    r.UserId,
+                    UserName = r.User.FullName,
+                    r.FlowerId,
+                    r.Rating,
+                    r.ReviewComment,
+                    r.ReviewDate
+                })
+                .ToListAsync();
 
-            var user = await _context.Users.FindAsync(review.UserId);
-            var reviewWithUserName = new
+            var averageRating = reviews.Any() ? reviews.Average(r => r.Rating) : 0;
+
+            var result = new
             {
-                review.ReviewId,
-                review.UserId,
-                UserName = user.FullName,
-                review.FlowerId,
-                review.Rating,
-                review.ReviewComment,
-                review.ReviewDate
+                AverageRating = Math.Round(averageRating, 2),
+                Reviews = reviews
             };
 
-            return CreatedAtAction("GetReview", new { id = review.ReviewId }, reviewWithUserName);
+            return result;
         }
 
         private async Task<bool> HasUserPurchasedFlower(int userId, int flowerId)
@@ -151,4 +178,4 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return _context.Reviews.Any(e => e.ReviewId == id);
         }
     }
-}  
+}

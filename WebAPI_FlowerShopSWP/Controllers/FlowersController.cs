@@ -28,10 +28,28 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
         // GET: api/Flowers
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Flower>>> GetFlowers()
+        public async Task<ActionResult<IEnumerable<object>>> GetFlowers()
         {
-            return await _context.Flowers.ToListAsync();
+            var flowers = await _context.Flowers
+                .Include(f => f.Seller)
+                .Select(f => new
+                {
+                    f.FlowerId,
+                    f.FlowerName,
+                    f.Price,
+                    f.Quantity,
+                    f.CategoryId,
+                    f.Condition,
+                    f.Status,
+                    f.ListingDate,
+                    f.ImageUrl,
+                    SellerName = f.Seller.Name
+                })
+                .ToListAsync();
+
+            return Ok(flowers);
         }
+
 
         [HttpGet("searchbyname")]
         public async Task<ActionResult<IEnumerable<Flower>>> SearchFlowers(string name)
@@ -68,44 +86,40 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
         // PUT: api/Flowers/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, Flower flower)
+        public async Task<IActionResult> PutFlower(int id, [FromBody] Flower updatedFlower, [FromForm] IFormFile? image)
         {
-            if (id != flower.FlowerId)
+            var flower = await _context.Flowers.FindAsync(id);
+            if (flower == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            _context.Entry(flower).State = EntityState.Modified;
-
-            try
+            flower.FlowerName = updatedFlower.FlowerName;
+            flower.Category = updatedFlower.Category;
+            flower.Price = updatedFlower.Price;
+            flower.Quantity = updatedFlower.Quantity;
+            flower.Condition = updatedFlower.Condition;
+            flower.Status = updatedFlower.Status;
+            // Nếu có hình ảnh mới, lưu hình ảnh và cập nhật URL
+            if (image != null)
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!FlowerExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                flower.ImageUrl = await SaveImageAsync(image);
             }
 
+
+            await _context.SaveChangesAsync();
             return NoContent();
         }
 
         [Authorize]
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
-     [FromForm] string FlowerName,
-     [FromForm] decimal Price,
-     [FromForm] int Quantity,
-     [FromForm] int CategoryId,
-     [FromForm] IFormFile? image)
+ [FromForm] string FlowerName,
+ [FromForm] decimal Price,
+ [FromForm] int Quantity,
+ [FromForm] int CategoryId,
+ [FromForm] IFormFile? image)
         {
             try
             {
@@ -250,5 +264,49 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(hasPurchased);
         }
+        // GET: api/Flowers?sellerId={userId}
+        [HttpGet]
+        [Route("seller/{userId}")]
+        public async Task<ActionResult<IEnumerable<object>>> GetFlowersBySeller(int userId)
+        {
+            var flowers = await _context.Flowers
+                .Include(f => f.Seller)
+                .Where(f => f.UserId == userId) // Lọc theo UserId
+                .Select(f => new
+                {
+                    f.FlowerId,
+                    f.FlowerName,
+                    f.Price,
+                    f.Quantity,
+                    f.CategoryId,
+                    f.Condition,
+                    f.Status,
+                    f.ListingDate,
+                    f.ImageUrl,
+                    SellerName = f.Seller.Name
+                })
+                .ToListAsync();
+
+            if (!flowers.Any())
+            {
+                return NotFound("No flowers found for this seller."); // Thông báo nếu không có hoa nào
+            }
+
+            return Ok(flowers); // Trả về danh sách hoa
+        }
+        [HttpGet]
+        [Route("categories")]
+        public IActionResult GetCategories()
+        {
+
+            var categories = _context.Categories
+                .Select(c => new { c.CategoryName })
+                .ToList();
+
+            return Ok(categories);
+        }
+
+
+
     }
 }
