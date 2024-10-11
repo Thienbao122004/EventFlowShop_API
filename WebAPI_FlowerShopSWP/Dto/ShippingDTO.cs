@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using WebAPI_FlowerShopSWP.Dto;
 
 namespace WebAPI_FlowerShopSWP.DTO
@@ -25,7 +25,6 @@ namespace WebAPI_FlowerShopSWP.DTO
         public string to_ward_code { get; set; }
         public string to_ward_name { get; set; }
         public int to_district_id { get; set; }
-        public int cod_amount { get; set; }
         public string content { get; set; }
         public int weight { get; set; }
         public int length { get; set; }
@@ -48,14 +47,5 @@ namespace WebAPI_FlowerShopSWP.DTO
         public string code { get; set; }
         public int quantity { get; set; }
         public int price { get; set; }
-        public int length { get; set; }
-        public int width { get; set; }
-        public int height { get; set; }
-        public GhnCategory category { get; set; }
-    }
-
-    public class Category
-    {
-        public string level1 { get; set; }
     }
 }

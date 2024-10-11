@@ -56,6 +56,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 if (user == null)
                 {
                     // User không tồn tại, trả về thông tin để frontend xử lý
+                    _logger.LogInformation($"New user detected: {userInfo.Email}");
                     return Ok(new
                     {
                         IsNewUser = true,
@@ -65,6 +66,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 }
 
                 // User đã tồn tại, tạo token và trả về như bình thường
+                _logger.LogInformation($"Existing user found: {user.Email}, UserId: {user.UserId}");
                 var token = GenerateJwtToken(user);
                 return Ok(new
                 {
@@ -85,10 +87,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             try
             {
+                _logger.LogInformation($"Completing registration for: {request.Email}");
                 var user = new User
                 {
                     Email = request.Email,
-                    FullName = request.FullName, // Sử dụng FullName thay vì Name
+                    FullName = request.FullName,
                     Name = request.Email.Split('@')[0], // Tạo username từ email
                     UserType = "Buyer",
                     Phone = request.Phone,
@@ -99,6 +102,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
+                _logger.LogInformation($"New user created: {user.Email}, UserId: {user.UserId}");
                 var token = GenerateJwtToken(user);
                 return Ok(new
                 {
@@ -132,7 +136,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
                     new Claim(ClaimTypes.Email, user.Email),
                     new Claim(ClaimTypes.Name, user.Name),
-                    //new Claim(ClaimTypes.Role, user.Role)
+                    new Claim(ClaimTypes.Role, user.UserType)
                 }),
                 Expires = DateTime.UtcNow.AddDays(7),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)

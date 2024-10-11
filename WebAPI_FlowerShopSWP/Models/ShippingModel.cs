@@ -44,10 +44,6 @@ namespace WebAPI_FlowerShopSWP.Models
         public string code { get; set; }
         public int quantity { get; set; }
         public int price { get; set; }
-        public int length { get; set; }
-        public int width { get; set; }
-        public int height { get; set; }
-        public GhnCategory category { get; set; }
     }
 
     public class WardResponse

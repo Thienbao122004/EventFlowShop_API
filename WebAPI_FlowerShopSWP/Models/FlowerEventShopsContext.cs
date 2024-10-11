@@ -176,7 +176,10 @@ public partial class FlowerEventShopsContext : DbContext
         {
             entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__4BA5CEA96D4DD061");
 
-            entity.Property(e => e.NotificationId).HasColumnName("notificationId");
+            entity.Property(e => e.NotificationId)
+                .HasColumnName("notificationId")
+                .UseIdentityColumn();
+
             entity.Property(e => e.IsRead)
                 .HasDefaultValue(false)
                 .HasColumnName("isRead");
@@ -187,12 +190,13 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
                 .HasColumnName("notificationDate");
-            entity.Property(e => e.UserId).HasColumnName("userId");
-
-            entity.HasOne(d => d.User).WithMany(p => p.Notifications)
-                .HasForeignKey(d => d.UserId)
+            entity.Property(e => e.SellerId)
+                .HasColumnName("sellerId");
+            entity.HasOne(d => d.Seller)
+                .WithMany(p => p.Notifications)
+                .HasForeignKey(d => d.SellerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Notificat__userI__73BA3083");
+                .HasConstraintName("FK_Notifications_Users");
         });
 
         modelBuilder.Entity<Order>(entity =>

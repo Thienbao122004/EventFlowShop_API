@@ -38,7 +38,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest("Shop chỉ hỗ trợ giao hàng trong các quận thuộc Hồ Chí Minh.");
             }
 
-            request.service_id = 53320;
             request.service_type_id = 2;
 
             var client = _httpClientFactory.CreateClient("GHNClient");
@@ -75,7 +74,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             var createOrderDto = new CreateOrderDto
             {
-                payment_type_id = request.payment_type_id,
+                payment_type_id = 1,
                 note = "Đơn hàng hoa",
                 from_name = request.from_name,
                 from_phone = request.from_phone,
@@ -83,31 +82,26 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 from_ward_name = request.from_ward_name,
                 from_district_name = request.from_district_name,
                 from_province_name = request.from_province_name,
-                required_note = request.required_note,
+                required_note = "CHOXEMHANGKHONGTHU",
                 to_name = request.to_name,
                 to_phone = request.to_phone,
                 to_address = request.to_address,
                 to_ward_code = request.to_ward_code,
                 to_ward_name = request.to_ward_name,
                 to_district_id = request.to_district_id,
-                cod_amount = request.items.Sum(item => item.price * item.quantity),
                 content = "Hoa",
                 weight = request.weight,
                 length = request.length,
                 width = request.width,
                 height = request.height,
                 insurance_value = request.items.Sum(item => item.price * item.quantity),
-                service_type_id = request.service_type_id,
+                service_type_id = 2,
                 items = request.items.Select(item => new CreateOrderItemDto
                 {
                     name = item.name,
-                    code = item.code,
                     quantity = item.quantity,
+                    code = item.code,
                     price = item.price,
-                    length = item.length,
-                    width = item.width,
-                    height = item.height,
-                    category = new GhnCategory { level1 = item.category.level1 }
                 }).ToList()
             };
 
@@ -183,49 +177,20 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpGet("wards")]
         public async Task<IActionResult> GetWards([FromQuery] int district_id)
         {
-            if (district_id <= 0)
-            {
-                return BadRequest("Invalid district_id. Please provide a valid district ID.");
-            }
-
             var client = _httpClientFactory.CreateClient("GHNClient");
 
-            try
-            {
-                var response = await client.GetAsync($"master-data/ward?district_id={district_id}");
+            var response = await client.GetAsync($"master-data/ward?district_id={district_id}");
 
-                var content = await response.Content.ReadAsStringAsync();
-                _logger.LogInformation($"Raw response for district {district_id}: {content}");
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadAsStringAsync();
+                var wardResponse = JsonConvert.DeserializeObject<WardResponse>(data);
 
-                if (response.IsSuccessStatusCode)
-                {
-                    try
-                    {
-                        var data = JsonConvert.DeserializeObject<dynamic>(content);
-                        return Ok(data);
-                    }
-                    catch (JsonException jsonEx)
-                    {
-                        _logger.LogError($"Error parsing JSON for district {district_id}: {jsonEx.Message}");
-                        return StatusCode(500, "Error parsing response from GHN API");
-                    }
-                }
-                else
-                {
-                    _logger.LogError($"Error fetching wards for district {district_id}. Status code: {response.StatusCode}. Content: {content}");
-                    return StatusCode((int)response.StatusCode, $"Unable to fetch wards. Error: {content}");
-                }
+                return Ok(wardResponse.Data);
             }
-            catch (HttpRequestException e)
-            {
-                _logger.LogError($"HTTP Request Error for district {district_id}: {e.Message}");
-                return StatusCode(500, $"An error occurred while fetching wards: {e.Message}");
-            }
-            catch (Exception e)
-            {
-                _logger.LogError($"Unexpected error for district {district_id}: {e.Message}");
-                return StatusCode(500, "An unexpected error occurred. Please try again later.");
-            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            return BadRequest($"Unable to fetch wards. Error: {errorContent}");
         }
     }
 }

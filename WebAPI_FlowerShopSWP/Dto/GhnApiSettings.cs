@@ -1,4 +1,4 @@
-﻿namespace WebAPI_FlowerShopSWP.Dto
+namespace WebAPI_FlowerShopSWP.Dto
 {
     public class GhnApiSettings
     {

@@ -99,13 +99,14 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
             // Tạo token
-            var tokenHandler = new JwtSecurityTokenHandler(); var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
 
             var claims = new List<Claim>
     {
         new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
         new Claim(ClaimTypes.Name, user.Name),
-        new Claim(ClaimTypes.Role, user.UserType)  // Sử dụng UserType trực tiếp
+        new Claim(ClaimTypes.Role, user.UserType)
     };
 
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -117,7 +118,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
 
-            return Ok(new { token = tokenHandler.WriteToken(token), userType = user.UserType });
+            return Ok(new
+            {
+                token = tokenHandler.WriteToken(token),
+                userType = user.UserType,
+                userId = user.UserId  // Thêm userId vào response
+            });
         }
 
 

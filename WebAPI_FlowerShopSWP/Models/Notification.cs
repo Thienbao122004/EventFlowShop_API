@@ -1,19 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
-public partial class Notification
+public class Notification
 {
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int NotificationId { get; set; }
+    public string Message { get; set; }
+    public DateTime NotificationDate { get; set; }
+    public bool IsRead { get; set; } = false;
+    public int SellerId { get; set; }
 
-    public int UserId { get; set; }
-
-    public string Message { get; set; } = null!;
-
-    public DateTime? NotificationDate { get; set; }
-
-    public bool? IsRead { get; set; }
-
-    public virtual User User { get; set; } = null!;
+    public virtual User? Seller { get; set; } = null!;
 }

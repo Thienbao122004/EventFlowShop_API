@@ -65,10 +65,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 _context.Reviews.RemoveRange(reviews);
                 await _context.SaveChangesAsync();
 
-                // Bước 5: Xóa các thông báo của người dùng
-                var notifications = await _context.Notifications.Where(n => n.UserId == id).ToListAsync();
-                _context.Notifications.RemoveRange(notifications);
-                await _context.SaveChangesAsync();
 
                 // Bước 6: Cuối cùng xóa người dùng
                 var user = await _context.Users.FindAsync(id);
