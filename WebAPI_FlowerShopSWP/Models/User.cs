@@ -23,10 +23,7 @@ public partial class User
 
     public DateTime? RegistrationDate { get; set; }
 
-    public virtual ICollection<Conversation> ConversationBuyers { get; set; } = new List<Conversation>();
-
-    public virtual ICollection<Conversation> ConversationSellers { get; set; } = new List<Conversation>();
-
+    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
 
     public virtual ICollection<Flower> Flowers { get; set; } = new List<Flower>();

@@ -86,19 +86,22 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return user;
         }
 
-        // POST: api/Users/login
         [HttpPost("login")]
-        public async Task<ActionResult<object>> Login([FromBody] User loginUser)
+        public async Task<ActionResult<object>> Login([FromBody] LoginModel loginUser)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Name == loginUser.Name && u.Password == loginUser.Password);
-
-            if (user == null)
+            if (loginUser == null || string.IsNullOrEmpty(loginUser.Name) || string.IsNullOrEmpty(loginUser.Password))
             {
-                return Unauthorized();
+                return BadRequest("Invalid login data");
             }
 
-            // Tạo token
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Name == loginUser.Name);
+
+            if (user == null || user.Password != loginUser.Password)
+            {
+                return Unauthorized("Invalid username or password");
+            }
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
 
@@ -122,10 +125,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 token = tokenHandler.WriteToken(token),
                 userType = user.UserType,
-                userId = user.UserId  // Thêm userId vào response
+                userId = user.UserId
             });
         }
 
+        public class LoginModel
+        {
+            public string Name { get; set; }
+            public string Password { get; set; }
+        }
 
         // POST: api/Users/register
         [HttpPost("register")]
@@ -365,21 +373,65 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return _context.Users.Any(e => e.UserId == id);
         }
         [HttpGet("current-user")]
-        [Authorize] // Chỉ cho phép người đã đăng nhập
-        public ActionResult<User> GetCurrentUser()
+        [Authorize]
+        public async Task<ActionResult<UserDto>> GetCurrentUser()
         {
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (int.TryParse(userIdString, out int userId))
+            if (!int.TryParse(userIdString, out int userId))
             {
-                var user = _context.Users.Find(userId); // Tìm người dùng dựa trên userId kiểu int
-                if (user == null)
-                {
-                    return NotFound();
-                }
-                return Ok(user);
+                return BadRequest("Invalid user ID");
             }
-            return BadRequest("Invalid user ID");
 
+            var user = await _context.Users
+                .AsNoTracking()
+                .Select(u => new UserDto
+                {
+                    UserId = u.UserId,
+                    Name = u.Name,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    UserType = u.UserType,
+                    Address = u.Address,
+                    Phone = u.Phone,
+                    RegistrationDate = u.RegistrationDate
+                })
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            return Ok(user);
         }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPut("{id}/usertype")]
+        public async Task<IActionResult> UpdateUserType(int id, [FromBody] string userType)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            user.UserType = userType;
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        public class UserDto
+        {
+            public int UserId { get; set; }
+            public string Name { get; set; }
+            public string FullName { get; set; }
+            public string Email { get; set; }
+            public string UserType { get; set; }
+            public string Address { get; set; }
+            public string Phone { get; set; }
+            public DateTime? RegistrationDate { get; set; }
+        }
+
     }
 }
