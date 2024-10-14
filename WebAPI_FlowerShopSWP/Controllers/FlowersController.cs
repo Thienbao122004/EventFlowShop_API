@@ -43,7 +43,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     f.Status,
                     f.ListingDate,
                     f.ImageUrl,
+
                     SellerName = f.Seller.Name 
+
                 })
                 .ToListAsync();
 
@@ -87,8 +89,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         // PUT: api/Flowers/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, [FromBody] Flower updatedFlower, [FromForm] IFormFile? image)
+        public async Task<IActionResult> PutFlower(int id, [FromForm] Flower updatedFlower, [FromForm] IFormFile? image)
         {
+
                 var flower = await _context.Flowers.FindAsync(id);
                 if (flower == null)
                 {
@@ -112,14 +115,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NoContent();
             }
 
-            [Authorize]
+
+
+        [Authorize]
+
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
-     [FromForm] string FlowerName,
-     [FromForm] decimal Price,
-     [FromForm] int Quantity,
-     [FromForm] int CategoryId,
-     [FromForm] IFormFile? image)
+         [FromForm] string FlowerName,
+         [FromForm] decimal Price,
+         [FromForm] int Quantity,
+         [FromForm] int CategoryId,
+         [FromForm] IFormFile? image)
         {
             try
             {
@@ -266,7 +272,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
         // GET: api/Flowers?sellerId={userId}
         [HttpGet]
+
         [Route("seller/{userId}")] 
+
         public async Task<ActionResult<IEnumerable<object>>> GetFlowersBySeller(int userId)
         {
             var flowers = await _context.Flowers
@@ -298,12 +306,14 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [Route("categories")]
         public IActionResult GetCategories()
         {
+
             
             var categories = _context.Categories
                 .Select(c => new { c.CategoryName }) 
                 .ToList();
 
             return Ok(categories); 
+
         }
 
 
