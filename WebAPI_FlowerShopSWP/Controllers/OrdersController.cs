@@ -33,6 +33,25 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _emailSender = emailSender;
         }
 
+        [HttpGet("history")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<Order>>> GetOrderHistory()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized("Invalid user ID");
+            }
+
+            var orders = await _context.Orders
+                .Where(o => o.UserId == userId) 
+                .Include(o => o.OrderItems)
+                .OrderByDescending(o => o.OrderDate)
+                .ToListAsync();
+
+            return Ok(orders);
+        }
+
         // GET: api/Orders
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Order>>> GetOrders()
@@ -145,9 +164,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
                         UserId = userId,
                         OrderStatus = "Pending",
                         OrderDate = DateTime.Now,
-                        DeliveryAddress = "Default Address", // Bạn có thể lấy địa chỉ từ input của người dùng
+                        DeliveryAddress = user.Address,
                         OrderItems = new List<OrderItem>()
-                    };
+                    }; 
 
                     decimal totalAmount = 0;
                     foreach (var cartItem in cartItems)

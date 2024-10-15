@@ -135,22 +135,35 @@ namespace WebAPI_FlowerShopSWP.Controllers
             public string Password { get; set; }
         }
 
-        // POST: api/Users/register
         [HttpPost("register")]
         public async Task<ActionResult<User>> Register([FromBody] User newUser)
         {
-            // Check if the email already exists
             if (_context.Users.Any(u => u.Email == newUser.Email))
             {
                 return Conflict("Email already in use.");
             }
+
             newUser.UserType = "Buyer";
+            newUser.RegistrationDate = DateTime.UtcNow;
+
+            // Tìm UserId lớn nhất hiện tại
+            var maxUserId = await _context.Users.MaxAsync(u => (int?)u.UserId) ?? 0;
+            newUser.UserId = maxUserId + 1;
+
             _context.Users.Add(newUser);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Log the exception
+                return StatusCode(500, "An error occurred while registering the user. Please try again.");
+            }
 
             return CreatedAtAction("GetUser", new { id = newUser.UserId }, newUser);
         }
-
 
 
         // PUT: api/Users/update/{id}
@@ -419,6 +432,44 @@ namespace WebAPI_FlowerShopSWP.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePassword model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var user = await _context.Users.FindAsync(userId);
+
+            if (user == null)
+            {
+                return NotFound("Không tìm thấy người dùng.");
+            }
+
+            // Kiểm tra mật khẩu hiện tại
+            if (user.Password != model.CurrentPassword)
+            {
+                return BadRequest("Mật khẩu hiện tại không đúng.");
+            }
+
+            // Cập nhật mật khẩu mới
+            user.Password = model.NewPassword;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Ok("Đổi mật khẩu thành công.");
+            }
+            catch (Exception ex)
+            {
+                // Log the exception
+                return StatusCode(500, "Đã xảy ra lỗi khi đổi mật khẩu.");
+            }
         }
 
         public class UserDto

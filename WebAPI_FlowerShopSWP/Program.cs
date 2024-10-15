@@ -53,7 +53,12 @@ namespace WebAPI_FlowerShopSWP
                     });
             });
 
-            builder.Services.AddControllers();
+
+            builder.Services.AddControllers()
+     .AddJsonOptions(options =>
+     {
+         options.JsonSerializerOptions.ReferenceHandler = null;
+     });
             builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSingleton<VNPayConfig>(sp =>
@@ -92,6 +97,7 @@ namespace WebAPI_FlowerShopSWP
                     }
                 });
             });
+
 
             builder.Services.AddDbContext<FlowerEventShopsContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("ConnectDB")));
