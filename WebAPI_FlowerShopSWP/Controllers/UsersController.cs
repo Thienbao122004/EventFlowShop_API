@@ -86,19 +86,22 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return user;
         }
 
-        // POST: api/Users/login
         [HttpPost("login")]
-        public async Task<ActionResult<object>> Login([FromBody] User loginUser)
+        public async Task<ActionResult<object>> Login([FromBody] LoginModel loginUser)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Name == loginUser.Name && u.Password == loginUser.Password);
-
-            if (user == null)
+            if (loginUser == null || string.IsNullOrEmpty(loginUser.Name) || string.IsNullOrEmpty(loginUser.Password))
             {
-                return Unauthorized();
+                return BadRequest("Invalid login data");
             }
 
-            // Tạo token
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Name == loginUser.Name);
+
+            if (user == null || user.Password != loginUser.Password)
+            {
+                return Unauthorized("Invalid username or password");
+            }
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
 
@@ -122,10 +125,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 token = tokenHandler.WriteToken(token),
                 userType = user.UserType,
-                userId = user.UserId  // Thêm userId vào response
+                userId = user.UserId
             });
         }
 
+        public class LoginModel
+        {
+            public string Name { get; set; }
+            public string Password { get; set; }
+        }
 
         // POST: api/Users/register
         [HttpPost("register")]
@@ -210,7 +218,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [Authorize]
         [HttpPut("profile")]
-        public async Task<IActionResult> UpdateUserProfile([FromBody] User updatedUser)
+        public async Task<IActionResult> UpdateUserProfile([FromForm] User updatedUser)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             var user = await _context.Users.FindAsync(userId);
@@ -226,13 +234,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
             user.Phone = updatedUser.Phone;
             user.Address = updatedUser.Address;
 
-            //user.ProfileImageUrl = updatedUser.ProfileImageUrl;
-
-            //if (!string.IsNullOrEmpty(updatedUser.ProfileImageUrl))
-            //{
-            //    user.ProfileImageUrl = updatedUser.ProfileImageUrl;
-            //}
-
+            
+            if (!string.IsNullOrEmpty(updatedUser.ProfileImageUrl))
+            {
+                user.ProfileImageUrl = updatedUser.ProfileImageUrl;
+            }
 
             try
             {
@@ -252,7 +258,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(user);
         }
-
         [Authorize]
         [HttpPost("upload-profile-image")]
         public async Task<IActionResult> UploadProfileImage(IFormFile file)
@@ -262,19 +267,19 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest("No file uploaded.");
             }
 
-            
+
             var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "PersistentImages", "profile");
 
-            
+
             if (!Directory.Exists(uploadsFolderPath))
             {
                 Directory.CreateDirectory(uploadsFolderPath);
             }
 
-            
+
             var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
 
-            
+
             var filePath = Path.Combine(uploadsFolderPath, uniqueFileName);
 
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -282,7 +287,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 await file.CopyToAsync(stream);
             }
 
-            
+
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             var user = await _context.Users.FindAsync(userId);
 
@@ -291,57 +296,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound("User not found.");
             }
 
-            user.ProfileImageUrl = "/images/profile/" + uniqueFileName; 
+            user.ProfileImageUrl = "/images/profile/" + uniqueFileName;
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
         }
-
-
-        //[Authorize]
-        //[HttpPost("upload-profile-image")]
-        //public async Task<IActionResult> UploadProfileImage(IFormFile file)
-        //{
-        //    if (file == null || file.Length == 0)
-        //    {
-        //        return BadRequest("No file uploaded.");
-        //    }
-
-
-        //    var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "PersistentImages", "profile");
-
-
-        //    if (!Directory.Exists(uploadsFolderPath))
-        //    {
-        //        Directory.CreateDirectory(uploadsFolderPath);
-        //    }
-
-
-        //    var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-
-
-        //    var filePath = Path.Combine(uploadsFolderPath, uniqueFileName);
-
-        //    using (var stream = new FileStream(filePath, FileMode.Create))
-        //    {
-        //        await file.CopyToAsync(stream);
-        //    }
-
-
-        //    var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-        //    var user = await _context.Users.FindAsync(userId);
-
-        //    if (user == null)
-        //    {
-        //        return NotFound("User not found.");
-        //    }
-
-        //    user.ProfileImageUrl = "/images/profile/" + uniqueFileName;
-        //    await _context.SaveChangesAsync();
-
-        //    return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
-        //}
-
 
         // POST: api/Users
         [HttpPost]
@@ -414,21 +373,101 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return _context.Users.Any(e => e.UserId == id);
         }
         [HttpGet("current-user")]
-        [Authorize] // Chỉ cho phép người đã đăng nhập
-        public ActionResult<User> GetCurrentUser()
+        [Authorize]
+        public async Task<ActionResult<UserDto>> GetCurrentUser()
         {
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (int.TryParse(userIdString, out int userId))
+            if (!int.TryParse(userIdString, out int userId))
             {
-                var user = _context.Users.Find(userId); // Tìm người dùng dựa trên userId kiểu int
-                if (user == null)
-                {
-                    return NotFound();
-                }
-                return Ok(user);
+                return BadRequest("Invalid user ID");
             }
-            return BadRequest("Invalid user ID");
 
+            var user = await _context.Users
+                .AsNoTracking()
+                .Select(u => new UserDto
+                {
+                    UserId = u.UserId,
+                    Name = u.Name,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    UserType = u.UserType,
+                    Address = u.Address,
+                    Phone = u.Phone,
+                    RegistrationDate = u.RegistrationDate
+                })
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            return Ok(user);
         }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPut("{id}/usertype")]
+        public async Task<IActionResult> UpdateUserType(int id, [FromBody] string userType)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            user.UserType = userType;
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+        [HttpGet("revenue/{sellerId}")]
+        public async Task<IActionResult> GetRevenue(int sellerId)
+        {
+            var completedOrderItems = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Flower)
+                .ToListAsync();
+
+            // Tổng doanh thu từ tất cả các sản phẩm đã bán của người bán
+            var totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
+
+            // Doanh thu theo tháng và năm
+            var revenueDetails = completedOrderItems
+                .Where(oi => oi.Order.OrderDate.HasValue)
+                .GroupBy(oi => new { Year = oi.Order.OrderDate.Value.Year, Month = oi.Order.OrderDate.Value.Month })
+                .Select(g => new
+                {
+                    Month = $"{g.Key.Month}/{g.Key.Year}",
+                    Amount = g.Sum(oi => oi.Price * oi.Quantity)
+                })
+                .ToList();
+
+            var result = new
+            {
+                Total = totalRevenue,
+                Details = revenueDetails
+            };
+
+            return Ok(result);
+        }
+
+
+
+
+
+
+        public class UserDto
+        {
+            public int UserId { get; set; }
+            public string Name { get; set; }
+            public string FullName { get; set; }
+            public string Email { get; set; }
+            public string UserType { get; set; }
+            public string Address { get; set; }
+            public string Phone { get; set; }
+            public DateTime? RegistrationDate { get; set; }
+        }
+
     }
 }

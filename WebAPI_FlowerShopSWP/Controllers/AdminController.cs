@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP.Controllers
@@ -39,34 +40,25 @@ namespace WebAPI_FlowerShopSWP.Controllers
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Bước 1: Lấy tất cả các đơn hàng của người dùng
                 var orders = await _context.Orders
                     .Where(o => o.UserId == id)
-                    .Include(o => o.OrderItems) // Lấy các OrderItems liên quan
-                    .Include(o => o.Payments) // Lấy các Payments liên quan
+                    .Include(o => o.OrderItems)
+                    .Include(o => o.Payments)
                     .ToListAsync();
 
-                // Bước 2: Xóa OrderItems và Payments liên quan đến các đơn hàng
                 foreach (var order in orders)
                 {
-
                     _context.OrderItems.RemoveRange(order.OrderItems);
-
-
                     _context.Payments.RemoveRange(order.Payments);
                 }
 
-                // Bước 3: Xóa các đơn hàng
                 _context.Orders.RemoveRange(orders);
                 await _context.SaveChangesAsync();
 
-                // Bước 4: Xóa các đánh giá của người dùng
                 var reviews = await _context.Reviews.Where(r => r.UserId == id).ToListAsync();
                 _context.Reviews.RemoveRange(reviews);
                 await _context.SaveChangesAsync();
 
-
-                // Bước 6: Cuối cùng xóa người dùng
                 var user = await _context.Users.FindAsync(id);
                 if (user == null)
                 {
@@ -86,21 +78,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
         }
 
-        //// Update flower status
-        //[HttpPut("flowers/{id}")]
-        //public async Task<IActionResult> UpdateFlowerStatus(int id, Flower updatedFlower)
-        //{
-        //    var flower = await _context.Flowers.FindAsync(id);
-        //    if (flower == null)
-        //    {
-        //        return NotFound();
-        //    }
-
-        //    flower.Status = updatedFlower.Status;
-        //    await _context.SaveChangesAsync();
-        //    return NoContent();
-        //}
-        // cập nhật role của người dùng 
+        // Update user role
         [HttpPut("users/{id}/role")]
         public async Task<IActionResult> UpdateUserRole(int id, [FromBody] string newRole)
         {
@@ -115,19 +93,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return NoContent();
         }
+
         // Get all orders
         [HttpGet("orders")]
         public async Task<ActionResult<IEnumerable<Order>>> GetAllOrders()
         {
             var orders = await _context.Orders
-                .Include(o => o.OrderItems)    // Lấy các OrderItems liên quan
-                .ThenInclude(oi => oi.Flower)   // Lấy thông tin hoa
-                .Include(o => o.User)           // Lấy thông tin User dựa trên UserId
+                .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Flower)
+                .Include(o => o.User)
                 .ToListAsync();
 
             return Ok(orders);
         }
-        // Xóa hoa
+
+        // Delete flower
         [HttpDelete("flowers/{id}")]
         public async Task<IActionResult> DeleteFlower(int id)
         {
@@ -142,7 +122,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return NoContent();
         }
-        // Cập nhật thông tin người dùng
+
+        // Update user information
         [HttpPut("users/{id}")]
         public async Task<IActionResult> UpdateUser(int id, [FromBody] User updatedUser)
         {
@@ -153,12 +134,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
             user.Name = updatedUser.Name ?? user.Name;
+            user.FullName = updatedUser.FullName ?? user.FullName;
             user.Email = updatedUser.Email ?? user.Email;
             user.UserType = updatedUser.UserType ?? user.UserType;
             user.Phone = updatedUser.Phone ?? user.Phone;
             user.Address = updatedUser.Address ?? user.Address;
 
-            // Cập nhật mật khẩu chỉ khi nó không phải là null hoặc trống
             if (!string.IsNullOrWhiteSpace(updatedUser.Password))
             {
                 user.Password = updatedUser.Password;
@@ -167,7 +148,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
-        // Cập nhật thông tin hoa
+
+        // Update flower information
         [HttpPut("flowers/{id}")]
         public async Task<IActionResult> UpdateFlower(int id, [FromBody] Flower updatedFlower)
         {
@@ -182,11 +164,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
             flower.Condition = updatedFlower.Condition;
             flower.Status = updatedFlower.Status;
 
-
             await _context.SaveChangesAsync();
             return NoContent();
         }
-        // Cập nhật trạng thái đơn hàng
+
+        // Update order status
         [HttpPut("orders/{id}/status")]
         public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] string newStatus)
         {
@@ -196,17 +178,18 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            order.OrderStatus = newStatus; // Cập nhật trạng thái đơn hàng
+            order.OrderStatus = newStatus;
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
-        // Xóa đơn hàng
+
+        // Delete order
         [HttpDelete("orders/{id}")]
         public async Task<IActionResult> DeleteOrder(int id)
         {
             var order = await _context.Orders
-                .Include(o => o.Payments) // Giả sử bạn đã có quan hệ giữa Orders và Payments
+                .Include(o => o.Payments)
                 .FirstOrDefaultAsync(o => o.OrderId == id);
 
             if (order == null)
@@ -214,10 +197,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            // Xóa các bản ghi thanh toán liên quan
             _context.Payments.RemoveRange(order.Payments);
-
-            // Xóa đơn hàng
             _context.Orders.Remove(order);
 
             await _context.SaveChangesAsync();
@@ -225,14 +205,14 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return NoContent();
         }
 
-        // Lấy thông tin chi tiết đơn hàng
+        // Get order details
         [HttpGet("orders/{id}")]
         public async Task<ActionResult<Order>> GetOrderDetails(int id)
         {
             var order = await _context.Orders
                 .Include(o => o.OrderItems)
-                .ThenInclude(oi => oi.Flower) // Lấy thông tin hoa
-                .Include(o => o.User) // Lấy thông tin người dùng
+                .ThenInclude(oi => oi.Flower)
+                .Include(o => o.User)
                 .FirstOrDefaultAsync(o => o.OrderId == id);
 
             if (order == null)
@@ -240,17 +220,16 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            // Cấu trúc lại order để bao gồm thông tin OrderItems
             var orderWithItems = new
             {
                 OrderId = order.OrderId,
                 OrderDate = order.OrderDate,
-                UserName = order.User.Name, // Hoặc thông tin khác từ User
+                UserName = order.User.Name,
                 OrderItems = order.OrderItems.Select(oi => new
                 {
                     OrderItemId = oi.OrderItemId,
                     FlowerId = oi.FlowerId,
-                    FlowerName = oi.Flower.FlowerName, // Lấy tên hoa từ bảng Flowers
+                    FlowerName = oi.Flower.FlowerName,
                     Quantity = oi.Quantity,
                     Price = oi.Price
                 }).ToList()
@@ -259,7 +238,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(orderWithItems);
         }
 
-
+        // Get dashboard stats
         [HttpGet("dashboard/stats")]
         public async Task<IActionResult> GetDashboardStats()
         {
@@ -276,6 +255,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(stats);
         }
+
+        // Get daily income
         [HttpGet("dashboard/income")]
         public async Task<IActionResult> GetDailyIncome()
         {
@@ -286,16 +267,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 {
                     Date = g.Key,
                     Income = g.SelectMany(o => o.OrderItems)
-                               .Sum(item => item.Price * item.Quantity) // Tính tổng thu nhập từ các OrderItems
+                               .Sum(item => item.Price * item.Quantity)
                 })
                 .ToListAsync();
 
             return Ok(dailyIncome);
         }
-
-
-
-
-
     }
 }

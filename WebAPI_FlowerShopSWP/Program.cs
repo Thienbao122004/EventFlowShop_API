@@ -13,7 +13,6 @@ using WebAPI_FlowerShopSWP.Controllers;
 using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.Repository;
 using WebAPI_FlowerShopSWP.Configurations;
-using WebAPI_FlowerShopSWP.Hubs;
 using Microsoft.Extensions.Options;
 using WebAPI_FlowerShopSWP.Dto;
 
@@ -96,7 +95,10 @@ namespace WebAPI_FlowerShopSWP
 
             builder.Services.AddDbContext<FlowerEventShopsContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("ConnectDB")));
-            builder.Services.AddSignalR();
+            builder.Services.AddSignalR(options =>
+            {
+                options.EnableDetailedErrors = true;
+            });
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -108,18 +110,32 @@ namespace WebAPI_FlowerShopSWP
                 options.LoginPath = "/api/LoginGoogle/login-google";
                 options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
             })
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = key,
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                    ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero,
-                };
-            })
+           .AddJwtBearer(options =>
+           {
+               options.TokenValidationParameters = new TokenValidationParameters
+               {
+                   ValidateIssuerSigningKey = true,
+                   IssuerSigningKey = key,
+                   ValidateIssuer = false,
+                   ValidateAudience = false,
+                   ValidateLifetime = true,
+                   ClockSkew = TimeSpan.Zero,
+               };
+
+               options.Events = new JwtBearerEvents
+               {
+                   OnMessageReceived = context =>
+                   {
+                       var accessToken = context.Request.Query["access_token"];
+                       var path = context.HttpContext.Request.Path;
+                       if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chathub"))
+                       {
+                           context.Token = accessToken;
+                       }
+                       return Task.CompletedTask;
+                   }
+               };
+           })
             .AddGoogle(googleOptions =>
             {
                 googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];

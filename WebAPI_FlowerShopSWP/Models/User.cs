@@ -11,6 +11,7 @@ public partial class User
 
     public string? FullName { get; set; }
 
+    public string? ProfileImageUrl { get; set; }
     public string? Email { get; set; }
 
     public string? Password { get; set; }
@@ -23,12 +24,7 @@ public partial class User
 
     public DateTime? RegistrationDate { get; set; }
 
-    public string? ProfileImageUrl { get; set; }
-
-    public virtual ICollection<Conversation> ConversationBuyers { get; set; } = new List<Conversation>();
-
-    public virtual ICollection<Conversation> ConversationSellers { get; set; } = new List<Conversation>();
-
+    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
 
     public virtual ICollection<Flower> Flowers { get; set; } = new List<Flower>();

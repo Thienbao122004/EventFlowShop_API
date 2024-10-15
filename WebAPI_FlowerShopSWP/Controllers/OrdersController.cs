@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using System.Globalization;
 using WebAPI_FlowerShopSWP.Repository;
+using System.Text.Json;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -53,29 +54,38 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return order;
         }
 
-
         [HttpPost("addtocart")]
         [Authorize]
         public async Task<IActionResult> AddToCart(int flowerId, int quantity)
         {
+            _logger.LogInformation($"AddToCart called with flowerId: {flowerId}, quantity: {quantity}");
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            _logger.LogInformation($"UserIdClaim: {userIdClaim}");
+
             if (userIdClaim == null || !int.TryParse(userIdClaim, out int userId))
             {
+                _logger.LogWarning($"Invalid user ID: {userIdClaim}");
                 return BadRequest("Người dùng không hợp lệ.");
             }
+
+            _logger.LogInformation($"UserId parsed: {userId}");
 
             var flower = await _context.Flowers.FindAsync(flowerId);
             if (flower == null)
             {
+                _logger.LogWarning($"Flower not found for ID: {flowerId}");
                 return NotFound("Không tìm thấy sản phẩm.");
             }
 
+            _logger.LogInformation($"Flower found: {flower.FlowerName}, Available quantity: {flower.Quantity}");
+
             if (flower.Quantity < quantity)
             {
+                _logger.LogWarning($"Insufficient quantity. Requested: {quantity}, Available: {flower.Quantity}");
                 return BadRequest("Số lượng sản phẩm không đủ.");
             }
 
-            // Thay vì lưu vào database, chúng ta sẽ trả về thông tin để lưu ở client
             var cartItem = new
             {
                 FlowerId = flowerId,
@@ -84,9 +94,10 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 Price = flower.Price
             };
 
+            _logger.LogInformation($"Cart item created: {JsonSerializer.Serialize(cartItem)}");
+
             return Ok(new { message = "Sản phẩm đã được thêm vào giỏ hàng.", cartItem });
         }
-
 
 
         [HttpPost]
@@ -290,6 +301,33 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _context.Orders.Remove(order);
             await _context.SaveChangesAsync(); return NoContent();
         }
+        [HttpGet("orders/seller/{sellerId}")]
+        public async Task<IActionResult> GetOrdersBySeller(int sellerId)
+        {
+            var orders = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Order.User)
+                .Select(oi => new
+                {
+                    oi.Order.OrderId,
+                    oi.Order.OrderDate,
+                    oi.Order.OrderStatus,
+                    oi.Order.DeliveryAddress,
+                    oi.Order.TotalAmount,
+                    BuyerName = oi.Order.User.FullName,
+                    BuyerEmail = oi.Order.User.Email,
+                    ProductName = oi.Flower.FlowerName,
+                    Quantity = oi.Quantity,
+                    ItemTotal = oi.Quantity * oi.Price
+                })
+                .ToListAsync();
+
+            return Ok(orders);
+        }
+
+
+
 
         private bool OrderExists(int id)
         {

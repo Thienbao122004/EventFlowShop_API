@@ -18,12 +18,11 @@ public partial class FlowerEventShopsContext : DbContext
     public virtual DbSet<Category> Categories { get; set; }
 
     public virtual DbSet<Conversation> Conversations { get; set; }
+    public virtual DbSet<Message> Messages { get; set; }
 
     public virtual DbSet<Delivery> Deliveries { get; set; }
 
     public virtual DbSet<Flower> Flowers { get; set; }
-
-    public virtual DbSet<Message> Messages { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
@@ -37,8 +36,12 @@ public partial class FlowerEventShopsContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public DbSet<SellerRegistrationRequest> SellerRegistrationRequests { get; set; }
+
+
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-RQ7RDFN3\\ADMIN;Initial Catalog=FlowerEventShops;Integrated Security=True;Encrypt=True;Trust Server Certificate=True");
+        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-RQ7RDFN3\\ADMIN;Initial Catalog=FlowerEventShops;Integrated Security=True;Trust Server Certificate=True");
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Category>(entity =>
@@ -56,25 +59,14 @@ public partial class FlowerEventShopsContext : DbContext
 
         modelBuilder.Entity<Conversation>(entity =>
         {
-            entity.HasKey(e => e.ConversationId).HasName("PK__Conversa__2860E54E94BB8454");
+            entity.HasKey(e => e.ConversationId);
+            entity.Property(e => e.UpdatedAt).HasColumnType("datetime");
 
-            entity.Property(e => e.ConversationId).HasColumnName("conversationId");
-            entity.Property(e => e.BuyerId).HasColumnName("buyerId");
-            entity.Property(e => e.SellerId).HasColumnName("sellerId");
-            entity.Property(e => e.StartDate)
-                .HasDefaultValueSql("(getdate())")
-                .HasColumnType("datetime")
-                .HasColumnName("startDate");
-
-            entity.HasOne(d => d.Buyer).WithMany(p => p.ConversationBuyers)
-                .HasForeignKey(d => d.BuyerId)
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Conversations)
+                .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Conversat__buyer__6383C8BA");
-
-            entity.HasOne(d => d.Seller).WithMany(p => p.ConversationSellers)
-                .HasForeignKey(d => d.SellerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Conversat__selle__6477ECF3");
+                .HasConstraintName("FK_Conversations_Users");
         });
 
         modelBuilder.Entity<Delivery>(entity =>
@@ -151,25 +143,25 @@ public partial class FlowerEventShopsContext : DbContext
 
             entity.Property(e => e.MessageId).HasColumnName("messageId");
             entity.Property(e => e.ConversationId).HasColumnName("conversationId");
-            entity.Property(e => e.IsRead)
-                .HasDefaultValue(false)
-                .HasColumnName("isRead");
+            entity.Property(e => e.UserId).HasColumnName("userId");
             entity.Property(e => e.MessageContent).HasColumnName("messageContent");
             entity.Property(e => e.SendTime)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
                 .HasColumnName("sendTime");
-            entity.Property(e => e.SenderId).HasColumnName("senderId");
+            entity.Property(e => e.IsRead)
+                .HasDefaultValue(false)
+                .HasColumnName("isRead");
 
             entity.HasOne(d => d.Conversation).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.ConversationId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Messages__conver__68487DD7");
+                .HasConstraintName("FK__Messages__ConversationId");
 
-            entity.HasOne(d => d.Sender).WithMany(p => p.Messages)
-                .HasForeignKey(d => d.SenderId)
+            entity.HasOne(d => d.User).WithMany(p => p.Messages)
+                .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Messages__sender__693CA210");
+                .HasConstraintName("FK__Messages__UserId");
         });
 
         modelBuilder.Entity<Notification>(entity =>
@@ -242,7 +234,7 @@ public partial class FlowerEventShopsContext : DbContext
             entity.Property(e => e.Quantity).HasColumnName("quantity");
             entity.Property(e => e.FlowerName)
                 .HasColumnName("flowerName")
-                .HasMaxLength(255); 
+                .HasMaxLength(255);
             entity.HasOne(d => d.Flower).WithMany(p => p.OrderItems)
                 .HasForeignKey(d => d.FlowerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -302,6 +294,27 @@ public partial class FlowerEventShopsContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Reviews__userId__6E01572D");
+        });
+
+        modelBuilder.Entity<SellerRegistrationRequest>(entity =>
+        {
+            entity.HasKey(e => e.RequestId);
+            entity.Property(e => e.RequestId).HasColumnName("requestId");
+            entity.Property(e => e.UserId).HasColumnName("userId");
+            entity.Property(e => e.StoreName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Address).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Phone).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.IdCard).HasMaxLength(12).IsRequired();
+            entity.Property(e => e.RequestDate).HasColumnType("datetime").HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Status).HasMaxLength(20).HasDefaultValue("Pending");
+            entity.Property(e => e.ProcessedDate).HasColumnType("datetime");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SellerRegistrationRequests_Users");
         });
 
         modelBuilder.Entity<User>(entity =>
