@@ -451,6 +451,37 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(result);
         }
+        [Authorize]
+        [HttpPost]
+        [Route("api/withdrawal")]
+        public IActionResult CreateWithdrawalRequest([FromBody] WithdrawalRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrEmpty(request.AccountNumber) ||
+                string.IsNullOrEmpty(request.FullName) ||
+                string.IsNullOrEmpty(request.Phone) ||
+                request.Amount <= 0)
+            {
+                return BadRequest("Vui lòng cung cấp đầy đủ thông tin hợp lệ.");
+            }
+
+            request.Remarks ??= null; 
+
+            
+            request.Status = "Pending";
+
+            
+            using (var context = new FlowerEventShopsContext())
+            {
+                context.WithdrawalRequests.Add(request);
+                context.SaveChanges(); 
+            }
+
+            return Ok("Yêu cầu rút tiền đã được gửi.");
+        }
+
+
+
 
 
 

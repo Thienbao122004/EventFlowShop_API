@@ -36,14 +36,31 @@ public partial class FlowerEventShopsContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
+
     public DbSet<SellerRegistrationRequest> SellerRegistrationRequests { get; set; }
 
 
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        => optionsBuilder.UseSqlServer("Data Source=LAPTOP-RQ7RDFN3\\ADMIN;Initial Catalog=FlowerEventShops;Integrated Security=True;Trust Server Certificate=True");
+        => optionsBuilder.UseSqlServer(GetConnectionString());
+    private string GetConnectionString()
+    {
+        IConfiguration config = new ConfigurationBuilder().
+            SetBasePath(Directory.GetCurrentDirectory()).
+            AddJsonFile("appsettings.json", true, true)
+            .Build();
+        string connectionString = config["ConnectionStrings:ConnectDB"];
+        return connectionString;
+    }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+
+        modelBuilder.Entity<WithdrawalRequest>()
+           .HasKey(w => w.RequestId); // Đảm bảo rằng RequestId được chỉ định là khóa chính
+
+        base.OnModelCreating(modelBuilder);
+
         modelBuilder.Entity<Category>(entity =>
         {
             entity.HasKey(e => e.CategoryId).HasName("PK__Categori__23CAF1D89BCF6E4B");
