@@ -89,31 +89,41 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         // PUT: api/Flowers/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, [FromForm] Flower updatedFlower, [FromForm] IFormFile? image)
+        public async Task<IActionResult> PutFlower(int id, [FromBody] Flower flowerUpdate)
         {
+            var existingFlower = await _context.Flowers.FindAsync(id);
+            if (existingFlower == null)
+            {
+                return NotFound();
+            }
 
-                var flower = await _context.Flowers.FindAsync(id);
-                if (flower == null)
-                {
-                    return NotFound();
-                }
+            
+            existingFlower.FlowerName = !string.IsNullOrWhiteSpace(flowerUpdate.FlowerName) ? flowerUpdate.FlowerName : existingFlower.FlowerName;
+            existingFlower.Price = flowerUpdate.Price != 0 ? flowerUpdate.Price : existingFlower.Price; // Giữ giá cũ nếu không được cung cấp
+            existingFlower.Quantity = flowerUpdate.Quantity != 0 ? flowerUpdate.Quantity : existingFlower.Quantity; // Giữ số lượng cũ nếu không được cung cấp
+                                             
+            if (!string.IsNullOrWhiteSpace(flowerUpdate.Condition))
+            {
+                existingFlower.Condition = flowerUpdate.Condition;
+            }
 
-                flower.FlowerName = updatedFlower.FlowerName;
-                flower.Category = updatedFlower.Category;
-                flower.Price= updatedFlower.Price;
-                flower.Quantity = updatedFlower.Quantity;
-                flower.Condition = updatedFlower.Condition;
-                flower.Status = updatedFlower.Status;
-                // Nếu có hình ảnh mới, lưu hình ảnh và cập nhật URL
-                if (image != null)
-                {
-                    flower.ImageUrl = await SaveImageAsync(image);
-                }
+            if (!string.IsNullOrWhiteSpace(flowerUpdate.Status))
+            {
+                existingFlower.Status = flowerUpdate.Status;
+            }
 
+            existingFlower.CategoryId = flowerUpdate.CategoryId != 0 ? flowerUpdate.CategoryId : existingFlower.CategoryId; 
+
+            
+            if (!string.IsNullOrWhiteSpace(flowerUpdate.ImageUrl)) 
+            {
+                existingFlower.ImageUrl = flowerUpdate.ImageUrl;
+            }
 
             await _context.SaveChangesAsync();
-                return NoContent();
-            }
+            return Ok(existingFlower);
+        }
+
 
 
 
