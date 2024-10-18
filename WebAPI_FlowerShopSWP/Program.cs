@@ -16,6 +16,7 @@ using WebAPI_FlowerShopSWP.Configurations;
 using Microsoft.Extensions.Options;
 using WebAPI_FlowerShopSWP.Dto;
 using WebAPI_FlowerShopSWP.Services;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -37,7 +38,7 @@ namespace WebAPI_FlowerShopSWP
             builder.Configuration.AddEnvironmentVariables();
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
-
+            builder.Services.AddMemoryCache();
             builder.Services.AddTransient<IEmailSender, EmailSender>();
             builder.Services.AddScoped<ShippingController>();
             builder.Services.AddCors(options =>
@@ -183,6 +184,7 @@ namespace WebAPI_FlowerShopSWP
                 app.UseDeveloperExceptionPage();
             }
 
+            app.UseHttpsRedirection();
             app.UseHttpsRedirection();
             app.UseStaticFiles();
 

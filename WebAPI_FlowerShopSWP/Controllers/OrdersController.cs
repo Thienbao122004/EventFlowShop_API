@@ -272,7 +272,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [HttpPost("checkout")]
         [Authorize]
-        public async Task<IActionResult> Checkout([FromBody] List<CartItem> cartItems)
+        public async Task<IActionResult> Checkout([FromBody] List<CartItem> cartItems, [FromQuery] string fullAddress)
         {
             if (cartItems == null || !cartItems.Any())
             {
@@ -300,7 +300,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
                         UserId = userId,
                         OrderStatus = "Pending",
                         OrderDate = DateTime.Now,
-                        DeliveryAddress = user.Address,
+                        //DeliveryAddress = user.Address,
+                        DeliveryAddress = string.IsNullOrEmpty(fullAddress) ? user.Address : fullAddress,
                         OrderDelivery = OrderDelivery.ChờXửLý,
                         OrderItems = new List<OrderItem>()
                     }; 
