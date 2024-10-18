@@ -17,6 +17,14 @@ using System.Text.Json;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
+    public enum OrderDelivery
+    {
+        ChờXửLý,
+        ĐangXửLý,
+        ĐãGửiHàng,
+        ĐãGiaoHàng,
+        ĐãHủy
+    }
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
@@ -35,7 +43,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [HttpGet("history")]
         [Authorize]
-        public async Task<ActionResult<IEnumerable<Order>>> GetOrderHistory()
+        public async Task<ActionResult<IEnumerable<object>>> GetOrderHistory()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
@@ -44,12 +52,41 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
             var orders = await _context.Orders
-                .Where(o => o.UserId == userId) 
-                .Include(o => o.OrderItems)
-                .OrderByDescending(o => o.OrderDate)
-                .ToListAsync();
+               .Where(o => o.UserId == userId)
+               .Include(o => o.OrderItems)
+               .Include(o => o.User)
+               .OrderByDescending(o => o.OrderDate)
+               .Select(o => new
+               {
+                   o.OrderId,
+                   o.OrderStatus,
+                   o.OrderDate,
+                   o.TotalAmount,
+                   o.OrderDelivery, // Thêm dòng này
+                   OrderItems = o.OrderItems.Select(oi => new
+                   {
+                       oi.FlowerId,
+                       oi.FlowerName,
+                       oi.Quantity,
+                       oi.Price
+                   }),
+                   Recipient = new
+                   {
+                       FullName = o.User.Name,
+                       Phone = o.User.Phone,
+                       Email = o.User.Email,
+                       Address = o.DeliveryAddress
+                   },
+                   User = new
+                   {
+                       FullName = o.User.Name,
+                       Phone = o.User.Phone,
+                       Email = o.User.Email
+                   }
+               })
+               .ToListAsync();
 
-            return Ok(orders);
+                    return Ok(orders);
         }
 
         // GET: api/Orders
@@ -134,6 +171,105 @@ namespace WebAPI_FlowerShopSWP.Controllers
             public int Quantity { get; set; }
         }
 
+        [HttpGet("seller-orders/{userId}")]
+        [Authorize(Roles = "Seller")]
+        public async Task<ActionResult<IEnumerable<object>>> GetSellerOrders(int userId)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+                {
+                    return Unauthorized("Invalid user ID");
+                }
+
+                // Đảm bảo rằng seller chỉ có thể xem đơn hàng của chính họ
+                if (currentUserId != userId)
+                {
+                    return Forbid("You are not authorized to view these orders");
+                }
+
+                var orders = await _context.Orders
+                    .Include(o => o.OrderItems)
+                    .ThenInclude(oi => oi.Flower)
+                    .Where(o => o.OrderItems.Any(oi => oi.Flower.UserId == userId))
+                    .OrderByDescending(o => o.OrderDate)
+                    .Select(o => new
+                    {
+                        o.OrderId,
+                        o.OrderStatus,
+                        o.OrderDate,
+                        o.TotalAmount,
+                        OrderDelivery = o.OrderDelivery.HasValue ? o.OrderDelivery.Value.ToString() : "N/A",
+                        Items = o.OrderItems.Where(oi => oi.Flower.UserId == userId).Select(oi => new
+                        {
+                            oi.FlowerId,
+                            oi.FlowerName,
+                            oi.Quantity,
+                            oi.Price
+                        })
+                    })
+                    .ToListAsync();
+
+                return Ok(orders);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred while fetching seller orders");
+                return StatusCode(500, "An error occurred while processing your request");
+            }
+        }
+
+        [HttpPut("{orderId}/delivery")]
+        [Authorize(Roles = "Seller")]
+        public async Task<IActionResult> UpdateOrderDelivery(int orderId, [FromBody] UpdateOrderDeliveryDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+                {
+                    return Unauthorized("Invalid user ID");
+                }
+
+                if (currentUserId != dto.UserId) // Thay đổi từ SellerId sang UserId
+                {
+                    return Forbid("You are not authorized to update this order");
+                }
+
+                var order = await _context.Orders
+                    .Include(o => o.OrderItems)
+                    .ThenInclude(oi => oi.Flower)
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId && o.OrderItems.Any(oi => oi.Flower.UserId == currentUserId));
+
+                if (order == null)
+                {
+                    return NotFound("Order not found or you don't have permission to update this order");
+                }
+
+                if (!Enum.TryParse(dto.OrderDelivery, out OrderDelivery newDeliveryStatus))
+                {
+                    return BadRequest("Invalid order delivery status");
+                }
+
+                order.OrderDelivery = newDeliveryStatus;
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Order delivery status updated successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error updating order delivery status for OrderId: {orderId}");
+                return StatusCode(500, $"An error occurred while updating the order: {ex.Message}");
+            }
+        }
+
+        public class UpdateOrderDeliveryDto
+        {
+            public string OrderDelivery { get; set; }
+            public int UserId { get; set; } // Thay đổi từ SellerId sang UserId
+        }
+
         [HttpPost("checkout")]
         [Authorize]
         public async Task<IActionResult> Checkout([FromBody] List<CartItem> cartItems)
@@ -165,6 +301,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                         OrderStatus = "Pending",
                         OrderDate = DateTime.Now,
                         DeliveryAddress = user.Address,
+                        OrderDelivery = OrderDelivery.ChờXửLý,
                         OrderItems = new List<OrderItem>()
                     }; 
 

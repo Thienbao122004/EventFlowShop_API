@@ -94,7 +94,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 length = request.length,
                 width = request.width,
                 height = request.height,
-                insurance_value = request.items.Sum(item => item.price * item.quantity),
+                //insurance_value = request.items.Sum(item => item.price * item.quantity),
                 service_type_id = 2,
                 items = request.items.Select(item => new CreateOrderItemDto
                 {

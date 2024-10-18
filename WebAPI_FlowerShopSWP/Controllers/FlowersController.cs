@@ -265,13 +265,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(hasPurchased);
         }
         // GET: api/Flowers?sellerId={userId}
-        [HttpGet]
-        [Route("seller/{userId}")]
+        [Authorize]
+        [HttpGet("seller/{userId}")]
         public async Task<ActionResult<IEnumerable<object>>> GetFlowersBySeller(int userId)
         {
             var flowers = await _context.Flowers
                 .Include(f => f.Seller)
-                .Where(f => f.UserId == userId) // Lọc theo UserId
+                .Where(f => f.UserId == userId)
                 .Select(f => new
                 {
                     f.FlowerId,
@@ -289,11 +289,30 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             if (!flowers.Any())
             {
-                return NotFound("No flowers found for this seller."); // Thông báo nếu không có hoa nào
+                return NotFound("No flowers found for this seller.");
             }
 
-            return Ok(flowers); // Trả về danh sách hoa
+            return Ok(flowers);
         }
+
+        [Authorize]
+        [HttpGet("manage/{userId}")]
+        public async Task<ActionResult<IEnumerable<object>>> ManageProducts(int userId)
+        {
+            var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+            if (currentUserId != userId)
+            {
+                return Forbid(); // Only the seller can manage their products
+            }
+
+            var flowers = await _context.Flowers
+                .Where(f => f.UserId == userId)
+                .ToListAsync();
+
+            return Ok(flowers);
+        }
+
+
         [HttpGet]
         [Route("categories")]
         public IActionResult GetCategories()

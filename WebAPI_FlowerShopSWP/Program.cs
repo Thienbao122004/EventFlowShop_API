@@ -15,6 +15,7 @@ using WebAPI_FlowerShopSWP.Repository;
 using WebAPI_FlowerShopSWP.Configurations;
 using Microsoft.Extensions.Options;
 using WebAPI_FlowerShopSWP.Dto;
+using WebAPI_FlowerShopSWP.Services;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -170,6 +171,7 @@ namespace WebAPI_FlowerShopSWP
                 client.BaseAddress = new Uri(ghnSettings.BaseAddress);
                 client.DefaultRequestHeaders.Add("Token", ghnSettings.Token);
             });
+            builder.Services.AddScoped<ISellerFollowService, SellerFollowService>();
 
             var app = builder.Build();
             app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");

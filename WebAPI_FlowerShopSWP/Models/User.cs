@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -37,4 +38,8 @@ public partial class User
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+    [JsonIgnore]
+    public ICollection<SellerFollow>? Following { get; set; }
+    [JsonIgnore]
+    public ICollection<SellerFollow>? Followers { get; set; }
 }

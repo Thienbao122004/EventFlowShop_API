@@ -1,6 +1,7 @@
 ﻿    using System;
     using System.Collections.Generic;
     using Microsoft.EntityFrameworkCore;
+using WebAPI_FlowerShopSWP.Controllers;
 
     namespace WebAPI_FlowerShopSWP.Models;
 
@@ -38,11 +39,22 @@
 
         public DbSet<SellerRegistrationRequest> SellerRegistrationRequests { get; set; }
 
+    public virtual DbSet<SellerFollow> SellerFollows { get; set; }
 
 
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-            => optionsBuilder.UseSqlServer("Data Source=LAPTOP-UH6IE60R\\SQLEXPRESS;Initial Catalog=FlowerEventShops;Integrated Security=True;Encrypt=True;Trust Server Certificate=True");
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+ => optionsBuilder.UseSqlServer(GetConnectionString());
+    private string GetConnectionString()
+    {
+        IConfiguration config = new ConfigurationBuilder().
+            SetBasePath(Directory.GetCurrentDirectory()).
+            AddJsonFile("appsettings.json", true, true)
+            .Build();
+        string connectionString = config["ConnectionStrings:ConnectDB"];
+        return connectionString;
+    }
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Category>(entity =>
             {
@@ -208,6 +220,11 @@
                     .HasMaxLength(20)
                     .HasColumnName("orderStatus");
 
+                entity.Property(e => e.OrderDelivery)
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .HasColumnName("orderDelivery");
+
                 entity.Property(e => e.TotalAmount)
                     .HasColumnType("decimal(18, 2)")
                     .HasColumnName("totalAmount")
@@ -269,7 +286,34 @@
                     .HasConstraintName("FK__Payments__orderI__787EE5A0");
             });
 
-            modelBuilder.Entity<Review>(entity =>
+        modelBuilder.Entity<SellerFollow>(entity =>
+        {
+            entity.HasKey(e => e.FollowId).HasName("PK__SellerFollow__FollowId");
+
+            entity.Property(e => e.FollowId).HasColumnName("followId");
+            entity.Property(e => e.UserId).HasColumnName("userId");
+            entity.Property(e => e.SellerId).HasColumnName("sellerId");
+            entity.Property(e => e.FollowDate)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("followDate");
+
+            // Thiết lập quan hệ với bảng Users (người theo dõi - buyer)
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Following)  // Quan hệ 1-n (1 người có thể theo dõi nhiều seller)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)  // Không tự động xóa các bản ghi liên quan
+                .HasConstraintName("FK_SellerFollow_User");
+
+            // Thiết lập quan hệ với bảng Users (người được theo dõi - seller)
+            entity.HasOne(d => d.Seller)
+                .WithMany(p => p.Followers)  // Quan hệ 1-n (1 seller có nhiều người theo dõi)
+                .HasForeignKey(d => d.SellerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SellerFollow_Seller");
+        });
+
+        modelBuilder.Entity<Review>(entity =>
             {
                 entity.HasKey(e => e.ReviewId).HasName("PK__Reviews__2ECD6E04CFF84127");
 
@@ -351,6 +395,7 @@
                 .HasColumnName("userType");
         });
 
+      
         OnModelCreatingPartial(modelBuilder);
     }
 

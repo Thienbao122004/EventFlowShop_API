@@ -88,8 +88,14 @@ namespace WebAPI_FlowerShopSWP.Controllers
             try
             {
                 _logger.LogInformation($"Completing registration for: {request.Email}");
+
+                // Tìm UserId lớn nhất hiện tại
+                var maxUserId = await _context.Users.MaxAsync(u => (int?)u.UserId) ?? 0;
+                var newUserId = maxUserId + 1;
+
                 var user = new User
                 {
+                    UserId = newUserId, // Gán UserId mới
                     Email = request.Email,
                     FullName = request.FullName,
                     Name = request.Email.Split('@')[0], // Tạo username từ email
@@ -99,6 +105,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     RegistrationDate = DateTime.UtcNow,
                     Password = null // Đảm bảo password là null cho người dùng đăng nhập bằng Google
                 };
+
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
@@ -116,7 +123,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return StatusCode(500, $"An error occurred during registration: {ex.Message}");
             }
         }
-
         public class CompleteRegistrationRequest
         {
             public string Email { get; set; }

@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using static WebAPI_FlowerShopSWP.Controllers.OrdersController;
+using WebAPI_FlowerShopSWP.Controllers;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -21,8 +23,11 @@ public partial class Order
     [Column(TypeName = "decimal(18,2)")]
     public decimal? TotalAmount { get; set; }
 
-  
+    public OrderDelivery? OrderDelivery { get; set; }
+
+
     public virtual User User { get; set; } = null!;
+
 
     
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();

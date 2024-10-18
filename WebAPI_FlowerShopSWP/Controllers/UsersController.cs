@@ -138,9 +138,28 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpPost("register")]
         public async Task<ActionResult<User>> Register([FromBody] User newUser)
         {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                    .Where(x => x.Value.Errors.Count > 0)
+                    .Select(x => new { Field = x.Key, Errors = x.Value.Errors.Select(e => e.ErrorMessage).ToArray() })
+                    .ToArray();
+
+                return BadRequest(new { Message = "Validation failed", Errors = errors });
+            }
+            newUser.Followers = null;
+            newUser.Following = null;
+
             if (_context.Users.Any(u => u.Email == newUser.Email))
             {
                 return Conflict("Email already in use.");
+            }
+
+            if (string.IsNullOrWhiteSpace(newUser.Name) || string.IsNullOrWhiteSpace(newUser.FullName) ||
+                string.IsNullOrWhiteSpace(newUser.Email) || string.IsNullOrWhiteSpace(newUser.Password) ||
+                string.IsNullOrWhiteSpace(newUser.Address))
+            {
+                return BadRequest("All fields are required.");
             }
 
             newUser.UserType = "Buyer";
@@ -162,9 +181,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return StatusCode(500, "An error occurred while registering the user. Please try again.");
             }
 
+            // Không trả về mật khẩu trong response
+            newUser.Password = null;
+
             return CreatedAtAction("GetUser", new { id = newUser.UserId }, newUser);
         }
-
 
         // PUT: api/Users/update/{id}
         [HttpPut("update/{id}")]
@@ -451,13 +472,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound("Không tìm thấy người dùng.");
             }
 
-            // Kiểm tra mật khẩu hiện tại
             if (user.Password != model.CurrentPassword)
             {
                 return BadRequest("Mật khẩu hiện tại không đúng.");
             }
 
-            // Cập nhật mật khẩu mới
+            if (model.NewPassword.Length < 5)
+            {
+                return BadRequest("Mật khẩu mới phải có ít nhất 5 ký tự.");
+            }
             user.Password = model.NewPassword;
 
             try
