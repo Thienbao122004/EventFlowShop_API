@@ -14,6 +14,10 @@ namespace WebAPI_FlowerShopSWP.Services
         {
             _context = context;
         }
+        public async Task<int> GetFollowersCount(int sellerId)
+        {
+            return await _context.SellerFollows.CountAsync(sf => sf.SellerId == sellerId);
+        }
 
         public async Task<bool> FollowSeller(int userId, int sellerId)
         {

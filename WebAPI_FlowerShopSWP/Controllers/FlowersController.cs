@@ -50,6 +50,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(flowers);
         }
 
+        [HttpGet("best-selling")]
+        public async Task<ActionResult<IEnumerable<Flower>>> GetBestSellingFlowers()
+        {
+            var bestSellingFlowers = await _context.OrderItems
+                .GroupBy(oi => oi.FlowerId)
+                .Select(g => new { FlowerId = g.Key, TotalSold = g.Sum(oi => oi.Quantity) })
+                .OrderByDescending(x => x.TotalSold)
+                .Take(10)  // Lấy top 10 sản phẩm bán chạy nhất
+                .Join(_context.Flowers,
+                    bs => bs.FlowerId,
+                    f => f.FlowerId,
+                    (bs, f) => f)
+                .ToListAsync();
+
+            return bestSellingFlowers;
+        }
+
 
         [HttpGet("searchbyname")]
         public async Task<ActionResult<IEnumerable<Flower>>> SearchFlowers(string name)
@@ -87,7 +104,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         // PUT: api/Flowers/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, [FromBody] Flower updatedFlower, [FromForm] IFormFile? image)
+        public async Task<IActionResult> PutFlower(int id, [FromForm] string FlowerName, [FromForm] decimal Price, [FromForm] int Quantity, [FromForm] string Status, [FromForm] string Category, [FromForm] IFormFile? image)
         {
             var flower = await _context.Flowers.FindAsync(id);
             if (flower == null)
@@ -95,20 +112,40 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            flower.FlowerName = updatedFlower.FlowerName;
-            flower.Category = updatedFlower.Category;
-            flower.Price = updatedFlower.Price;
-            flower.Quantity = updatedFlower.Quantity;
-            flower.Condition = updatedFlower.Condition;
-            flower.Status = updatedFlower.Status;
-            // Nếu có hình ảnh mới, lưu hình ảnh và cập nhật URL
+            flower.FlowerName = FlowerName;
+            flower.Price = Price;
+            flower.Quantity = Quantity;
+            flower.Status = Status;
+
+            // Find the category by name
+            var category = await _context.Categories.FirstOrDefaultAsync(c => c.CategoryName == Category);
+            if (category != null)
+            {
+                flower.CategoryId = category.CategoryId;
+            }
+
+            // If there's a new image, update it
             if (image != null)
             {
                 flower.ImageUrl = await SaveImageAsync(image);
             }
 
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!FlowerExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
 
-            await _context.SaveChangesAsync();
             return NoContent();
         }
 

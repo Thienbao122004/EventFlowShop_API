@@ -183,7 +183,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     return Unauthorized("Invalid user ID");
                 }
 
-                // Đảm bảo rằng seller chỉ có thể xem đơn hàng của chính họ
                 if (currentUserId != userId)
                 {
                     return Forbid("You are not authorized to view these orders");
@@ -207,7 +206,20 @@ namespace WebAPI_FlowerShopSWP.Controllers
                             oi.FlowerName,
                             oi.Quantity,
                             oi.Price
-                        })
+                        }),
+                        Recipient = new
+                        {
+                            FullName = o.User.Name,
+                            Phone = o.User.Phone,
+                            Email = o.User.Email,
+                            Address = o.DeliveryAddress
+                        },
+                        User = new
+                        {
+                            FullName = o.User.Name,
+                            Phone = o.User.Phone,
+                            Email = o.User.Email
+                        }
                     })
                     .ToListAsync();
 
@@ -320,7 +332,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                             return BadRequest($"Không đủ số lượng hoa: {flower.FlowerName}");
                         }
 
-                        flower.Quantity -= cartItem.Quantity;
                         totalAmount += flower.Price * cartItem.Quantity;
 
                         newOrder.OrderItems.Add(new OrderItem

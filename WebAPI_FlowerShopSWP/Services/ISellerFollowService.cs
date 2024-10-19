@@ -10,5 +10,7 @@ namespace WebAPI_FlowerShopSWP.Services
         Task<bool> UnfollowSeller(int userId, int sellerId);
         Task<bool> IsFollowing(int userId, int sellerId);
         Task<IEnumerable<User>> GetFollowedSellers(int userId);
+
+        Task<int> GetFollowersCount(int sellerId);
     }
 }

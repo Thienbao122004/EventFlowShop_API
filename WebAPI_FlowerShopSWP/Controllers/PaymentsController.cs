@@ -110,7 +110,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _logger.LogInformation("Payment process completed successfully for user {UserId}", userId);
             return Ok(new { paymentUrl });
         }
-
         [HttpGet("vnpay-return")]
         public async Task<IActionResult> VnPayReturn()
         {
@@ -163,6 +162,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
                 try
                 {
+                    // Reduce quantity only when payment is successful
+                    var orderItems = await _context.OrderItems
+                        .Where(oi => oi.OrderId == order.OrderId)
+                        .Include(oi => oi.Flower)
+                        .ToListAsync();
+
+                    foreach (var item in orderItems)
+                    {
+                        item.Flower.Quantity -= item.Quantity;
+                        if (item.Flower.Quantity < 0)
+                        {
+                            throw new Exception($"Insufficient stock for flower: {item.FlowerName}");
+                        }
+                    }
+
                     _context.Payments.Add(payment);
                     order.OrderStatus = "Completed";
                     await _context.SaveChangesAsync();

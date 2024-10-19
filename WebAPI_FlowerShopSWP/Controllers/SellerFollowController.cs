@@ -23,6 +23,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _sellerFollowService = sellerFollowService;
         }
 
+        [HttpGet("followers-count/{sellerId}")]
+        public async Task<IActionResult> GetFollowersCount(int sellerId)
+        {
+            var count = await _sellerFollowService.GetFollowersCount(sellerId);
+            return Ok(count);
+        }
+
         [HttpPost("follow")]
         public async Task<IActionResult> FollowSeller([FromBody] SellerFollow model)
         {
