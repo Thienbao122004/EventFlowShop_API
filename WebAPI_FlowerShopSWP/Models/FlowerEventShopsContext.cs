@@ -393,7 +393,10 @@ using WebAPI_FlowerShopSWP.Controllers;
             entity.Property(e => e.UserType)
                 .HasMaxLength(20)
                 .HasColumnName("userType");
-        });
+            entity.Property(e => e.ProfileImageUrl)
+              .HasMaxLength(20)
+              .HasColumnName("profileImageUrl");
+    });
 
       
         OnModelCreatingPartial(modelBuilder);

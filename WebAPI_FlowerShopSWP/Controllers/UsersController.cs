@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -22,13 +23,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
     public class UsersController : ControllerBase
     {
         private readonly FlowerEventShopsContext _context;
+        private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IConfiguration _configuration;
         private readonly IEmailSender _emailSender;
 
-        public UsersController(FlowerEventShopsContext context, IConfiguration configuration, IEmailSender emailSender)
+        public UsersController(FlowerEventShopsContext context, IConfiguration configuration, IEmailSender emailSender, IWebHostEnvironment webHostEnvironment)
         {
             _context = context;
             _configuration = configuration;
+            _webHostEnvironment = webHostEnvironment;
             _emailSender = emailSender;
         }
         // GET: api/Users
@@ -250,9 +253,47 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return NoContent();
         }
 
+
+        [HttpGet("profile-image/{userId}")]
+        public IActionResult GetProfileImage(int userId)
+        {
+            var user = _context.Users.Find(userId);
+            if (user == null || string.IsNullOrEmpty(user.ProfileImageUrl))
+            {
+                return NotFound();
+            }
+
+            var imagePath = Path.Combine(_webHostEnvironment.WebRootPath, user.ProfileImageUrl.TrimStart('/'));
+            if (!System.IO.File.Exists(imagePath))
+            {
+                return NotFound();
+            }
+
+            var imageFileInfo = new FileInfo(imagePath);
+            var imageBytes = System.IO.File.ReadAllBytes(imagePath);
+            return File(imageBytes, GetMimeType(imageFileInfo.Extension));
+        }
+
+        private string GetMimeType(string extension)
+        {
+            switch (extension.ToLower())
+            {
+                case ".jpg":
+                case ".jpeg":
+                    return "image/jpeg";
+                case ".png":
+                    return "image/png";
+                case ".gif":
+                    return "image/gif";
+                default:
+                    return "application/octet-stream";
+            }
+        }
+
+
         [Authorize]
         [HttpPut("profile")]
-        public async Task<IActionResult> UpdateUserProfile([FromBody] User updatedUser)
+        public async Task<IActionResult> UpdateUserProfile([FromForm] User updatedUser, IFormFile profileImage)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             var user = await _context.Users.FindAsync(userId);
@@ -267,12 +308,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
             user.FullName = updatedUser.FullName;
             user.Phone = updatedUser.Phone;
             user.Address = updatedUser.Address;
-            //user.ProfileImageUrl = updatedUser.ProfileImageUrl;
 
-            //if (!string.IsNullOrEmpty(updatedUser.ProfileImageUrl))
-            //{
-            //    user.ProfileImageUrl = updatedUser.ProfileImageUrl;
-            //}
+            if (profileImage != null && profileImage.Length > 0)
+            {
+                var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads");
+                if (!Directory.Exists(uploadsFolder))
+                    Directory.CreateDirectory(uploadsFolder);
+
+                var uniqueFileName = Guid.NewGuid().ToString() + "_" + profileImage.FileName;
+                var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await profileImage.CopyToAsync(fileStream);
+                }
+
+                user.ProfileImageUrl = "/uploads/" + uniqueFileName;
+            }
 
             try
             {
@@ -292,49 +344,39 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(user);
         }
-        //[Authorize]
-        //[HttpPost("upload-profile-image")]
-        //public async Task<IActionResult> UploadProfileImage(IFormFile file)
-        //{
-        //    if (file == null || file.Length == 0)
-        //    {
-        //        return BadRequest("No file uploaded.");
-        //    }
+
+        [Authorize]
+        [HttpPost("upload-profile-image")]
+        public async Task<IActionResult> UploadProfileImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var user = await _context.Users.FindAsync(userId);
+
+            if (user == null)
+                return NotFound();
+
+            var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads");
+            if (!Directory.Exists(uploadsFolder))
+                Directory.CreateDirectory(uploadsFolder);
+
+            var uniqueFileName = Guid.NewGuid().ToString() + "_" + file.FileName;
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(fileStream);
+            }
+
+            user.ProfileImageUrl = "/uploads/" + uniqueFileName;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { profileImageUrl = user.ProfileImageUrl });
+        }
 
 
-        //    var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "PersistentImages", "profile");
-
-
-        //    if (!Directory.Exists(uploadsFolderPath))
-        //    {
-        //        Directory.CreateDirectory(uploadsFolderPath);
-        //    }
-
-
-        //    var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-
-
-        //    var filePath = Path.Combine(uploadsFolderPath, uniqueFileName);
-
-        //    using (var stream = new FileStream(filePath, FileMode.Create))
-        //    {
-        //        await file.CopyToAsync(stream);
-        //    }
-
-
-        //    var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-        //    var user = await _context.Users.FindAsync(userId);
-
-        //    if (user == null)
-        //    {
-        //        return NotFound("User not found.");
-        //    }
-
-        //    user.ProfileImageUrl = "/images/profile/" + uniqueFileName;
-        //    await _context.SaveChangesAsync();
-
-        //    return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
-        //}
 
         // POST: api/Users
         [HttpPost]

@@ -24,6 +24,8 @@ public partial class User
 
     public string? Phone { get; set; }
 
+    public string? ProfileImageUrl { get; set; }
+
     public DateTime? RegistrationDate { get; set; }
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
