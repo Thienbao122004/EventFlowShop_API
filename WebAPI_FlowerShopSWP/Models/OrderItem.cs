@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace WebAPI_FlowerShopSWP.Models;
 
@@ -19,5 +20,6 @@ public partial class OrderItem
 
     public virtual Flower Flower { get; set; } = null!;
 
+    [JsonIgnore]
     public virtual Order Order { get; set; } = null!;
 }

@@ -256,7 +256,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(stats);
         }
 
-        // Get daily income
         [HttpGet("dashboard/income")]
         public async Task<IActionResult> GetDailyIncome()
         {
@@ -273,5 +272,75 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(dailyIncome);
         }
+        [Authorize]
+        [HttpGet("api/withdrawal-requests")]
+        public IActionResult GetWithdrawalRequests()
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var requests = context.WithdrawalRequests.ToList();
+                return Ok(requests);
+            }
+        }
+
+        [Authorize]
+        [HttpPut("api/withdrawal-request/{id}")]
+        public IActionResult UpdateWithdrawalRequest(int id, [FromBody] string status)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = context.WithdrawalRequests.Find(id);
+                if (request == null)
+                {
+                    return NotFound();
+                }
+
+                request.Status = status;
+                context.SaveChanges();
+
+                return Ok("Trạng thái yêu cầu đã được cập nhật.");
+            }
+        }
+        [Authorize]
+        [HttpPost("api/withdrawals/{requestId}/approve")]
+        public async Task<IActionResult> ApproveWithdrawalRequest(int requestId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = await context.WithdrawalRequests.FindAsync(requestId);
+                if (request == null)
+                {
+                    return NotFound("Yêu cầu không tồn tại.");
+                }
+       
+                request.Status = "Approved";
+
+                var user = await context.Users.FindAsync(request.UserId);
+                if (user == null)
+                {
+                    return NotFound("Người dùng không tồn tại.");
+                }
+
+                
+                var totalRevenue = await context.OrderItems
+                    .Where(oi => oi.Flower.UserId == user.UserId && oi.Order.OrderStatus == "Completed")
+                    .SumAsync(oi => oi.Price * oi.Quantity);
+
+                
+                if (totalRevenue < request.Amount)
+                {
+                    return BadRequest("Doanh thu không đủ để thực hiện yêu cầu rút tiền.");
+                }
+
+                totalRevenue -= request.Amount;
+
+
+                await context.SaveChangesAsync();
+
+                return Ok("Yêu cầu đã được duyệt và doanh thu đã được cập nhật.");
+            }
+        }
+
+
     }
 }

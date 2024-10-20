@@ -51,7 +51,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(flowers);
         }
-
+        [HttpGet("best-selling")]
+        public async Task<ActionResult<IEnumerable<Flower>>> GetBestSellingFlowers()
+        {
+            var bestSellingFlowers = await _context.OrderItems
+                .GroupBy(oi => oi.FlowerId)
+                .Select(g => new { FlowerId = g.Key, TotalSold = g.Sum(oi => oi.Quantity) })
+                .OrderByDescending(x => x.TotalSold)
+                .Take(10)  
+                .Join(_context.Flowers,
+                    bs => bs.FlowerId,
+                    f => f.FlowerId,
+                    (bs, f) => f)
+                .ToListAsync();
+            return bestSellingFlowers;
+        }
 
         [HttpGet("searchbyname")]
         public async Task<ActionResult<IEnumerable<Flower>>> SearchFlowers(string name)
@@ -86,42 +100,50 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return flower;
         }
-
-        // PUT: api/Flowers/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, [FromBody] Flower flowerUpdate)
+        public async Task<IActionResult> PutFlower(int id, [FromForm] string FlowerName, [FromForm] decimal Price, [FromForm] int Quantity, [FromForm] string Status, [FromForm] string Category, [FromForm] IFormFile? image)
         {
-            var existingFlower = await _context.Flowers.FindAsync(id);
-            if (existingFlower == null)
+            var flower = await _context.Flowers.FindAsync(id);
+            if (flower == null)
             {
                 return NotFound();
             }
 
-            
-            existingFlower.FlowerName = !string.IsNullOrWhiteSpace(flowerUpdate.FlowerName) ? flowerUpdate.FlowerName : existingFlower.FlowerName;
-            existingFlower.Price = flowerUpdate.Price != 0 ? flowerUpdate.Price : existingFlower.Price; // Giữ giá cũ nếu không được cung cấp
-            existingFlower.Quantity = flowerUpdate.Quantity != 0 ? flowerUpdate.Quantity : existingFlower.Quantity; // Giữ số lượng cũ nếu không được cung cấp
-                                             
-            if (!string.IsNullOrWhiteSpace(flowerUpdate.Condition))
-            {
-                existingFlower.Condition = flowerUpdate.Condition;
-            }
-
-            if (!string.IsNullOrWhiteSpace(flowerUpdate.Status))
-            {
-                existingFlower.Status = flowerUpdate.Status;
-            }
-
-            existingFlower.CategoryId = flowerUpdate.CategoryId != 0 ? flowerUpdate.CategoryId : existingFlower.CategoryId; 
+            flower.FlowerName = FlowerName;
+            flower.Price = Price;
+            flower.Quantity = Quantity;
+            flower.Status = Status;
 
             
-            if (!string.IsNullOrWhiteSpace(flowerUpdate.ImageUrl)) 
+            var category = await _context.Categories.FirstOrDefaultAsync(c => c.CategoryName == Category);
+            if (category != null)
             {
-                existingFlower.ImageUrl = flowerUpdate.ImageUrl;
+                flower.CategoryId = category.CategoryId;
             }
 
-            await _context.SaveChangesAsync();
-            return Ok(existingFlower);
+            
+            if (image != null)
+            {
+                flower.ImageUrl = await SaveImageAsync(image);
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!FlowerExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent();
         }
 
 
@@ -281,15 +303,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(hasPurchased);
         }
         // GET: api/Flowers?sellerId={userId}
-        [HttpGet]
-
-        [Route("seller/{userId}")] 
-
+        [Authorize]
+        [HttpGet("seller/{userId}")]
         public async Task<ActionResult<IEnumerable<object>>> GetFlowersBySeller(int userId)
         {
             var flowers = await _context.Flowers
                 .Include(f => f.Seller)
-                .Where(f => f.UserId == userId) // Lọc theo UserId
+                .Where(f => f.UserId == userId)
                 .Select(f => new
                 {
                     f.FlowerId,
@@ -307,11 +327,30 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             if (!flowers.Any())
             {
-                return NotFound("No flowers found for this seller."); // Thông báo nếu không có hoa nào
+                return NotFound("No flowers found for this seller.");
             }
 
-            return Ok(flowers); // Trả về danh sách hoa
+            return Ok(flowers);
         }
+
+        [Authorize]
+        [HttpGet("manage/{userId}")]
+        public async Task<ActionResult<IEnumerable<object>>> ManageProducts(int userId)
+        {
+            var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+            if (currentUserId != userId)
+            {
+                return Forbid(); // Only the seller can manage their products
+            }
+
+            var flowers = await _context.Flowers
+                .Where(f => f.UserId == userId)
+                .ToListAsync();
+
+            return Ok(flowers);
+        }
+
+
         [HttpGet]
         [Route("categories")]
         public IActionResult GetCategories()

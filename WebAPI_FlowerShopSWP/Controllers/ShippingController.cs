@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.DTO;
 using WebAPI_FlowerShopSWP.Dto;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -21,11 +22,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private readonly ILogger<ShippingController> _logger;
         private readonly GhnApiSettings _ghnSettings;
 
-        public ShippingController(IHttpClientFactory httpClientFactory, ILogger<ShippingController> logger, IOptions<GhnApiSettings> ghnSettings)
+        private readonly IMemoryCache _cache;
+        public ShippingController(IHttpClientFactory httpClientFactory, ILogger<ShippingController> logger, IOptions<GhnApiSettings> ghnSettings, IMemoryCache cache)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
             _ghnSettings = ghnSettings.Value;
+            _cache = cache;
         }
 
         [HttpPost("calculate-shipping-fee")]
@@ -36,6 +39,11 @@ namespace WebAPI_FlowerShopSWP.Controllers
             if (!hcmDistrictIds.Contains(request.to_district_id))
             {
                 return BadRequest("Shop chỉ hỗ trợ giao hàng trong các quận thuộc Hồ Chí Minh.");
+            }
+            string cacheKey = $"shipping_fee_{request.to_district_id}_{request.to_ward_code}_{request.weight}";
+            if (_cache.TryGetValue(cacheKey, out string cachedResponse))
+            {
+                return Ok(cachedResponse);
             }
 
             request.service_type_id = 2;
@@ -48,6 +56,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
             if (response.IsSuccessStatusCode)
             {
                 var data = await response.Content.ReadAsStringAsync();
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(30));
+                _cache.Set(cacheKey, data, cacheEntryOptions);
                 return Ok(data);
             }
 
@@ -94,7 +105,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 length = request.length,
                 width = request.width,
                 height = request.height,
-                insurance_value = request.items.Sum(item => item.price * item.quantity),
+                //insurance_value = request.items.Sum(item => item.price * item.quantity),
                 service_type_id = 2,
                 items = request.items.Select(item => new CreateOrderItemDto
                 {

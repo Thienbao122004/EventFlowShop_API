@@ -123,7 +123,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return StatusCode(500, $"An error occurred during registration: {ex.Message}");
             }
         }
-
         public class CompleteRegistrationRequest
         {
             public string Email { get; set; }

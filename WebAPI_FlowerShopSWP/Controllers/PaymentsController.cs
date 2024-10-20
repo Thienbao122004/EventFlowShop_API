@@ -12,6 +12,9 @@ using Microsoft.AspNetCore.Identity.UI.Services;
 using WebAPI_FlowerShopSWP.Repository;
 using IEmailSender = WebAPI_FlowerShopSWP.Repository.IEmailSender;
 using System.Globalization;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 namespace WebAPI_FlowerShopSWP.Controllers
 {
     [Route("api/[controller]")]
@@ -22,26 +25,29 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private readonly VNPayConfig _vnpayConfig;
         private readonly ILogger<PaymentsController> _logger;
         private readonly IEmailSender _emailSender;
+        private readonly IMemoryCache _memoryCache;
 
         public PaymentsController(
             FlowerEventShopsContext context,
             IOptions<VNPayConfig> vnpayConfig,
             ILogger<PaymentsController> logger,
-            IEmailSender emailSender)
+            IEmailSender emailSender,
+            IMemoryCache memoryCache)
         {
             _context = context;
             _vnpayConfig = vnpayConfig.Value;
             _logger = logger;
             _emailSender = emailSender;
+            _memoryCache = memoryCache;
         }
 
         private bool PaymentExists(int id)
         {
             return _context.Payments.Any(e => e.PaymentId == id);
         }
-
+        [Authorize]
         [HttpPost("createVnpPayment")]
-        public IActionResult CreateVnpPayment([FromBody] PaymentRequest request)
+        public async Task<IActionResult> CreateVnpPayment([FromBody] PaymentRequest request)
         {
             if (!ModelState.IsValid)
             {
@@ -53,9 +59,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest("Amount must be greater than 0.");
             }
 
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            _logger.LogInformation("Starting payment process for user {UserId}, amount: {Amount}", userId, request.Amount);
+
             var vnpay = new VnPayLibrary();
             var vnp_Returnurl = "http://localhost:5173/payment-result";
-            var vnp_TxnRef = DateTime.Now.Ticks.ToString(); // Unique transaction reference
+            var vnp_TxnRef = DateTime.Now.Ticks.ToString();
             var vnp_OrderInfo = "order";
             var vnp_OrderType = "other";
             var vnp_Amount = request.Amount * 100;
@@ -80,90 +89,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
             vnpay.AddRequestData("vnp_ReturnUrl", vnp_Returnurl);
             vnpay.AddRequestData("vnp_TxnRef", vnp_TxnRef);
 
+            var latestOrder = await _context.Orders
+                .Where(o => o.UserId == userId)
+                .OrderByDescending(o => o.OrderDate)
+                .FirstOrDefaultAsync();
+            if (latestOrder == null)
+            {
+                return BadRequest("Không tìm thấy đơn hàng.");
+            }
+            var cacheEntryOptions = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(10));
+            _memoryCache.Set($"TxnRef_{vnp_TxnRef}", latestOrder.OrderId, cacheEntryOptions);
+
             string paymentUrl = vnpay.CreateRequestUrl(vnp_Url, vnp_HashSecret);
             _logger.LogInformation("Generated payment URL: {PaymentUrl}", paymentUrl);
+            _logger.LogInformation("Payment process completed successfully for user {UserId}", userId);
             return Ok(new { paymentUrl });
         }
-
-        //[HttpGet("vnpay-return")]
-        //public async Task<IActionResult> VnPayReturn()
-        //{
-        //    var vnpay = new VnPayLibrary();
-
-        //    foreach (var (key, value) in Request.Query)
-        //    {
-        //        vnpay.AddResponseData(key, value.ToString());
-        //    }
-
-        //    var vnp_SecureHash = Request.Query["vnp_SecureHash"].ToString();
-        //    var orderInfo = vnpay.GetResponseData("vnp_OrderInfo");
-        //    var vnp_TransactionId = vnpay.GetResponseData("vnp_TransactionNo");
-        //    var vnp_ResponseCode = vnpay.GetResponseData("vnp_ResponseCode");
-        //    var vnp_TxnRef = vnpay.GetResponseData("vnp_TxnRef");
-        //    var vnp_Amount = long.Parse(vnpay.GetResponseData("vnp_Amount")) / 100;
-
-        //    _logger.LogInformation("Received Response: OrderInfo={OrderInfo}, TransactionId={TransactionId}, ResponseCode={ResponseCode}, SecureHash={SecureHash}", orderInfo, vnp_TransactionId, vnp_ResponseCode, vnp_SecureHash);
-
-        //    var checkSignature = vnpay.ValidateSignature(vnp_SecureHash, _vnpayConfig.HashSecret);
-
-        //    if (checkSignature)
-        //    {
-        //        if (vnp_ResponseCode == "00")
-        //        {
-        //            int orderId;
-        //            if (int.TryParse(vnp_TxnRef, out orderId))
-        //            {
-        //                var order = await _context.Orders.FindAsync(orderId);
-        //                if (order == null)
-        //                {
-        //                    _logger.LogError("Order not found for Order ID: {OrderId}", orderId);
-        //                    return BadRequest("Order not found.");
-        //                }
-
-        //                var payment = new Payment
-        //                {
-        //                    OrderId = orderId,
-        //                    Amount = (decimal)vnp_Amount,
-        //                    PaymentDate = DateTime.Now,
-        //                    PaymentStatus = "Completed"
-        //                };
-
-        //                try
-        //                {
-        //                    _context.Payments.Add(payment);
-        //                    order.OrderStatus = "Paid";
-        //                    await _context.SaveChangesAsync();
-
-        //                    var user = await _context.Users.FindAsync(order.UserId);
-        //                    if (user != null)
-        //                    {
-        //                        await SendConfirmationEmail(user, order, (decimal)vnp_Amount);
-        //                    }
-
-        //                    return Ok("Thanh toán thành công");
-        //                }
-        //                catch (Exception ex)
-        //                {
-        //                    _logger.LogError("Error processing payment: {Message}", ex.Message);
-        //                    return StatusCode(500, "Error processing payment.");
-        //                }
-        //            }
-        //            else
-        //            {
-        //                _logger.LogError("Invalid Order ID: {TxnRef}", vnp_TxnRef);
-        //                return BadRequest("Invalid order ID in the transaction reference.");
-        //            }
-        //        }
-        //        else
-        //        {
-        //            return BadRequest($"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}");
-        //        }
-        //    }
-        //    else
-        //    {
-        //        return BadRequest("Invalid signature");
-        //    }
-        //}
         [HttpGet("vnpay-return")]
         public async Task<IActionResult> VnPayReturn()
         {
@@ -191,32 +133,18 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest(new { status = "error", message = "Invalid signature" });
             }
 
-            if (string.IsNullOrEmpty(vnp_TxnRef))
-            {
-                _logger.LogError("TxnRef is null or empty");
-                return BadRequest(new { status = "error", message = "Transaction reference is missing." });
-            }
-
-            DateTime txnDateTime;
-            if (!long.TryParse(vnp_TxnRef, out long ticks))
-            {
-                _logger.LogError("Invalid TxnRef format: {TxnRef}", vnp_TxnRef);
-                return BadRequest(new { status = "error", message = "Invalid transaction reference format." });
-            }
-
-            txnDateTime = new DateTime(ticks);
-            _logger.LogInformation("Parsed TxnRef DateTime: {TxnDateTime}", txnDateTime);
-
-            // Tìm đơn hàng trong khoảng thời gian hợp lý
-            var order = await _context.Orders
-                .Where(o => o.OrderDate >= txnDateTime.AddMinutes(-5) && o.OrderDate <= txnDateTime.AddMinutes(5))
-                .OrderByDescending(o => o.OrderDate)
-                .FirstOrDefaultAsync();
-
-            if (order == null)
+            if (!_memoryCache.TryGetValue($"TxnRef_{vnp_TxnRef}", out int orderId))
             {
                 _logger.LogError("No matching order found for TxnRef: {TxnRef}", vnp_TxnRef);
                 return BadRequest(new { status = "error", message = "No matching order found." });
+            }
+
+            var order = await _context.Orders.FindAsync(orderId);
+
+            if (order == null)
+            {
+                _logger.LogError("Order not found for OrderId: {OrderId}", orderId);
+                return BadRequest(new { status = "error", message = "Order not found." });
             }
 
             if (vnp_ResponseCode == "00")
@@ -231,6 +159,18 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
                 try
                 {
+                    var orderItems = await _context.OrderItems
+                        .Where(oi => oi.OrderId == order.OrderId)
+                        .Include(oi => oi.Flower)
+                        .ToListAsync();
+                    foreach (var item in orderItems)
+                    {
+                        item.Flower.Quantity -= item.Quantity;
+                        if (item.Flower.Quantity < 0)
+                        {
+                            throw new Exception($"Insufficient stock for flower: {item.FlowerName}");
+                        }
+                    }
                     _context.Payments.Add(payment);
                     order.OrderStatus = "Completed";
                     await _context.SaveChangesAsync();
@@ -251,8 +191,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
             else
             {
-                // Không thay đổi trạng thái đơn hàng nếu thanh toán thất bại
-                // Thay vào đó, chỉ thêm một bản ghi thanh toán thất bại
                 var failedPayment = new Payment
                 {
                     OrderId = order.OrderId,

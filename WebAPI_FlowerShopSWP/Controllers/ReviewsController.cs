@@ -21,12 +21,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _context = context;
         }
 
-        // GET: api/Reviews
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Review>>> GetReviews()
-        {
-            return await _context.Reviews.ToListAsync();
-        }
+        //// GET: api/Reviews
+        //[HttpGet]
+        //public async Task<ActionResult<IEnumerable<Review>>> GetReviews()
+        //{
+        //    return await _context.Reviews.ToListAsync();
+        //}
 
         // GET: api/Reviews/5
         [HttpGet("{id}")]
@@ -112,6 +112,47 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return NoContent();
         }
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<object>>> GetReviews()
+        {
+            var reviews = await _context.Reviews
+                .Include(r => r.User)
+                .Include(r => r.Flower)
+                .ThenInclude(f => f.Seller) 
+                .Select(r => new
+                {
+                    r.ReviewId,
+                    r.UserId,
+                    UserName = r.User.FullName,
+                    r.FlowerId,
+                    FlowerName = r.Flower.FlowerName,
+                    SellerId = r.Flower.UserId,
+                    SellerName = r.Flower.Seller.FullName,
+                    r.Rating,
+                    r.ReviewComment,
+                    r.ReviewDate
+                })
+                .ToListAsync();
+            return Ok(reviews);
+        }
+        [HttpGet("stats")]
+        public async Task<ActionResult<object>> GetReviewStats()
+        {
+            var stats = await _context.Reviews
+                .GroupBy(r => 1)
+                .Select(g => new
+                {
+                    AverageRating = g.Any() ? g.Average(r => r.Rating) : 0,
+                    TotalReviews = g.Count()
+                })
+                .FirstOrDefaultAsync();
+            if (stats == null)
+            {
+                stats = new { AverageRating = 0.0, TotalReviews = 0 };
+            }
+            Console.WriteLine($"Backend stats: Average Rating = {stats.AverageRating}, Total Reviews = {stats.TotalReviews}");
+            return Ok(stats);
+        }
 
         [HttpGet("flower/{flowerId}")]
         public async Task<ActionResult<object>> GetReviewsByFlowerId(int flowerId)
@@ -133,10 +174,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 .ToListAsync();
 
             var averageRating = reviews.Any() ? reviews.Average(r => r.Rating) : 0;
+            var totalReviews = reviews.Count;
 
             var result = new
             {
                 AverageRating = Math.Round(averageRating, 2),
+                TotalReviews = totalReviews,
                 Reviews = reviews
             };
 
@@ -176,6 +219,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private bool ReviewExists(int id)
         {
             return _context.Reviews.Any(e => e.ReviewId == id);
+        }
+        [HttpGet("count/{flowerId}")]
+        public async Task<ActionResult<int>> GetReviewsCountByFlowerId(int flowerId)
+        {
+            var count = await _context.Reviews.CountAsync(r => r.FlowerId == flowerId);
+            return Ok(count);
         }
     }
 }

@@ -135,23 +135,57 @@ namespace WebAPI_FlowerShopSWP.Controllers
             public string Password { get; set; }
         }
 
-        // POST: api/Users/register
         [HttpPost("register")]
         public async Task<ActionResult<User>> Register([FromBody] User newUser)
         {
-            // Check if the email already exists
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                    .Where(x => x.Value.Errors.Count > 0)
+                    .Select(x => new { Field = x.Key, Errors = x.Value.Errors.Select(e => e.ErrorMessage).ToArray() })
+                    .ToArray();
+
+                return BadRequest(new { Message = "Validation failed", Errors = errors });
+            }
+            newUser.Followers = null;
+            newUser.Following = null;
+
             if (_context.Users.Any(u => u.Email == newUser.Email))
             {
                 return Conflict("Email already in use.");
             }
+
+            if (string.IsNullOrWhiteSpace(newUser.Name) || string.IsNullOrWhiteSpace(newUser.FullName) ||
+                string.IsNullOrWhiteSpace(newUser.Email) || string.IsNullOrWhiteSpace(newUser.Password) ||
+                string.IsNullOrWhiteSpace(newUser.Address))
+            {
+                return BadRequest("All fields are required.");
+            }
+
             newUser.UserType = "Buyer";
+            newUser.RegistrationDate = DateTime.UtcNow;
+
+            // Tìm UserId lớn nhất hiện tại
+            var maxUserId = await _context.Users.MaxAsync(u => (int?)u.UserId) ?? 0;
+            newUser.UserId = maxUserId + 1;
+
             _context.Users.Add(newUser);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Log the exception
+                return StatusCode(500, "An error occurred while registering the user. Please try again.");
+            }
+
+            // Không trả về mật khẩu trong response
+            newUser.Password = null;
 
             return CreatedAtAction("GetUser", new { id = newUser.UserId }, newUser);
         }
-
-
 
         // PUT: api/Users/update/{id}
         [HttpPut("update/{id}")]
@@ -429,28 +463,31 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 .Include(oi => oi.Flower)
                 .ToListAsync();
 
-            // Tổng doanh thu từ tất cả các sản phẩm đã bán của người bán
             var totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
+            var commission = totalRevenue * (decimal)0.30;
+            var netRevenue = totalRevenue - commission; 
 
-            // Doanh thu theo tháng và năm
             var revenueDetails = completedOrderItems
                 .Where(oi => oi.Order.OrderDate.HasValue)
-                .GroupBy(oi => new { Year = oi.Order.OrderDate.Value.Year, Month = oi.Order.OrderDate.Value.Month })
+                .GroupBy(oi => new { Day = oi.Order.OrderDate.Value.Date })
                 .Select(g => new
                 {
-                    Month = $"{g.Key.Month}/{g.Key.Year}",
+                    Date = g.Key.Day.ToString("dd/MM/yyyy"),
                     Amount = g.Sum(oi => oi.Price * oi.Quantity)
                 })
                 .ToList();
 
             var result = new
             {
-                Total = totalRevenue,
+                TotalRevenue = totalRevenue,
+                Commission = commission,
+                NetRevenue = netRevenue,
                 Details = revenueDetails
             };
 
             return Ok(result);
         }
+
         [Authorize]
         [HttpPost]
         [Route("api/withdrawal")]
@@ -469,8 +506,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             
             request.Status = "Pending";
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim != null)
+            {
+                request.UserId = int.Parse(userIdClaim.Value);
+            }
 
-            
+
             using (var context = new FlowerEventShopsContext())
             {
                 context.WithdrawalRequests.Add(request);
@@ -486,6 +528,108 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
 
 
+
+
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePassword model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var user = await _context.Users.FindAsync(userId);
+
+            if (user == null)
+            {
+                return NotFound("Không tìm thấy người dùng.");
+            }
+
+            if (user.Password != model.CurrentPassword)
+            {
+                return BadRequest("Mật khẩu hiện tại không đúng.");
+            }
+
+            if (model.NewPassword.Length < 5)
+            {
+                return BadRequest("Mật khẩu mới phải có ít nhất 5 ký tự.");
+            }
+            user.Password = model.NewPassword;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Ok("Đổi mật khẩu thành công.");
+            }
+            catch (Exception ex)
+            {
+                // Log the exception
+                return StatusCode(500, "Đã xảy ra lỗi khi đổi mật khẩu.");
+            }
+        }
+        [Authorize]
+        [HttpGet("api/users/{userId}/revenue")]
+        public async Task<IActionResult> GetUserRevenue(int userId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                
+                var totalRevenue = await context.OrderItems
+                    .Where(oi => oi.Flower.UserId == userId && oi.Order.OrderStatus == "Completed")
+                    .SumAsync(oi => oi.Price * oi.Quantity);
+
+                
+                var commission = totalRevenue * (decimal)0.30;
+
+                
+                var totalWithdrawn = await context.WithdrawalRequests
+                    .Where(wr => wr.UserId == userId && wr.Status == "Approved")
+                    .SumAsync(wr => wr.Amount);
+
+               
+                var currentIncome = totalRevenue - commission - totalWithdrawn; 
+
+                return Ok(new
+                {
+                    UserId = userId,
+                    TotalRevenue = totalRevenue,
+                    Commission = commission,
+                    TotalWithdrawn = totalWithdrawn,
+                    CurrentIncome = currentIncome
+                });
+            }
+        }
+        [Authorize]
+        [HttpGet("api/withdrawal-requests/{userId}")]
+        public IActionResult GetWithdrawalRequests(int userId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var requests = context.WithdrawalRequests
+                    .Where(r => r.UserId == userId) 
+                    .ToList();
+                return Ok(requests);
+            }
+        }
+        [Authorize]
+        [HttpDelete("api/withdrawal-requests/{requestId}")]
+        public IActionResult CancelWithdrawalRequest(int requestId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = context.WithdrawalRequests.Find(requestId);
+                if (request == null)
+                {
+                    return NotFound();
+                }
+
+                context.WithdrawalRequests.Remove(request);
+                context.SaveChanges();
+                return Ok();
+            }
+        }
 
 
         public class UserDto

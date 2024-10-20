@@ -15,6 +15,8 @@ using WebAPI_FlowerShopSWP.Repository;
 using WebAPI_FlowerShopSWP.Configurations;
 using Microsoft.Extensions.Options;
 using WebAPI_FlowerShopSWP.Dto;
+using WebAPI_FlowerShopSWP.Services;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -37,6 +39,7 @@ namespace WebAPI_FlowerShopSWP
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
+            builder.Services.AddMemoryCache();
             builder.Services.AddTransient<IEmailSender, EmailSender>();
             builder.Services.AddScoped<ShippingController>();
             builder.Services.AddCors(options =>
@@ -53,7 +56,12 @@ namespace WebAPI_FlowerShopSWP
                     });
             });
 
-            builder.Services.AddControllers();
+
+            builder.Services.AddControllers()
+     .AddJsonOptions(options =>
+     {
+         options.JsonSerializerOptions.ReferenceHandler = null;
+     });
             builder.Services.Configure<VNPayConfig>(builder.Configuration.GetSection("VNPay"));
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSingleton<VNPayConfig>(sp =>
@@ -92,6 +100,7 @@ namespace WebAPI_FlowerShopSWP
                     }
                 });
             });
+
 
             builder.Services.AddDbContext<FlowerEventShopsContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("ConnectDB")));
@@ -164,6 +173,7 @@ namespace WebAPI_FlowerShopSWP
                 client.BaseAddress = new Uri(ghnSettings.BaseAddress);
                 client.DefaultRequestHeaders.Add("Token", ghnSettings.Token);
             });
+            builder.Services.AddScoped<ISellerFollowService, SellerFollowService>();
 
             var app = builder.Build();
             app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
@@ -175,6 +185,7 @@ namespace WebAPI_FlowerShopSWP
                 app.UseDeveloperExceptionPage();
             }
 
+            app.UseHttpsRedirection();
             app.UseHttpsRedirection();
             app.UseStaticFiles();
 
