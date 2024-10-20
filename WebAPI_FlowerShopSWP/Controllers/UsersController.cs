@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,12 +25,14 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private readonly FlowerEventShopsContext _context;
         private readonly IConfiguration _configuration;
         private readonly IEmailSender _emailSender;
+        private readonly IWebHostEnvironment _webHostEnvironment;
 
-        public UsersController(FlowerEventShopsContext context, IConfiguration configuration, IEmailSender emailSender)
+        public UsersController(FlowerEventShopsContext context, IConfiguration configuration, IEmailSender emailSender,IWebHostEnvironment webHostEnvironment)
         {
             _context = context;
             _configuration = configuration;
             _emailSender = emailSender;
+            _webHostEnvironment = webHostEnvironment;
         }
         // GET: api/Users
         [HttpGet]
@@ -252,7 +255,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [Authorize]
         [HttpPut("profile")]
-        public async Task<IActionResult> UpdateUserProfile([FromForm] User updatedUser)
+        public async Task<IActionResult> UpdateUserProfile([FromForm] string FullName, [FromForm] string Email, [FromForm] string Address, [FromForm] string Phone, [FromForm] IFormFile? image)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             var user = await _context.Users.FindAsync(userId);
@@ -262,16 +265,15 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            user.Name = updatedUser.Name;
-            user.Email = updatedUser.Email;
-            user.FullName = updatedUser.FullName;
-            user.Phone = updatedUser.Phone;
-            user.Address = updatedUser.Address;
+            user.FullName = FullName;
+            user.Email = Email;
+            user.Address = Address;
+            user.Phone = Phone;
 
-            
-            if (!string.IsNullOrEmpty(updatedUser.ProfileImageUrl))
+
+            if (image != null)
             {
-                user.ProfileImageUrl = updatedUser.ProfileImageUrl;
+                user.ProfileImageUrl = await SaveImageAsync(image);
             }
 
             try
@@ -292,6 +294,29 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(user);
         }
+        private async Task<string> SaveImageAsync(IFormFile image)
+        {
+            if (image == null || image.Length == 0)
+            {
+                throw new ArgumentException("Invalid file");
+            }
+
+            var uploadPath = Path.Combine(_webHostEnvironment.WebRootPath, "images");
+            if (!Directory.Exists(uploadPath))
+            {
+                Directory.CreateDirectory(uploadPath);
+            }
+
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
+            var filePath = Path.Combine(uploadPath, fileName);
+
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await image.CopyToAsync(fileStream);
+            }
+
+            return "/images/" + fileName;
+        }
         [Authorize]
         [HttpPost("upload-profile-image")]
         public async Task<IActionResult> UploadProfileImage(IFormFile file)
@@ -302,7 +327,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
 
-            var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "PersistentImages", "profile");
+            var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
 
 
             if (!Directory.Exists(uploadsFolderPath))
@@ -330,7 +355,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound("User not found.");
             }
 
-            user.ProfileImageUrl = "/images/profile/" + uniqueFileName;
+            user.ProfileImageUrl = "/images/" + uniqueFileName;
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
@@ -465,7 +490,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             var totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
             var commission = totalRevenue * (decimal)0.30;
-            var netRevenue = totalRevenue - commission; 
+            var netRevenue = totalRevenue - commission;
 
             var revenueDetails = completedOrderItems
                 .Where(oi => oi.Order.OrderDate.HasValue)
@@ -502,9 +527,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest("Vui lòng cung cấp đầy đủ thông tin hợp lệ.");
             }
 
-            request.Remarks ??= null; 
+            request.Remarks ??= null;
 
-            
+
             request.Status = "Pending";
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim != null)
@@ -516,7 +541,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             using (var context = new FlowerEventShopsContext())
             {
                 context.WithdrawalRequests.Add(request);
-                context.SaveChanges(); 
+                context.SaveChanges();
             }
 
             return Ok("Yêu cầu rút tiền đã được gửi.");
@@ -575,21 +600,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             using (var context = new FlowerEventShopsContext())
             {
-                
+
                 var totalRevenue = await context.OrderItems
                     .Where(oi => oi.Flower.UserId == userId && oi.Order.OrderStatus == "Completed")
                     .SumAsync(oi => oi.Price * oi.Quantity);
 
-                
+
                 var commission = totalRevenue * (decimal)0.30;
 
-                
+
                 var totalWithdrawn = await context.WithdrawalRequests
                     .Where(wr => wr.UserId == userId && wr.Status == "Approved")
                     .SumAsync(wr => wr.Amount);
 
-               
-                var currentIncome = totalRevenue - commission - totalWithdrawn; 
+
+                var currentIncome = totalRevenue - commission - totalWithdrawn;
 
                 return Ok(new
                 {
@@ -608,7 +633,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             using (var context = new FlowerEventShopsContext())
             {
                 var requests = context.WithdrawalRequests
-                    .Where(r => r.UserId == userId) 
+                    .Where(r => r.UserId == userId)
                     .ToList();
                 return Ok(requests);
             }
@@ -623,6 +648,10 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 if (request == null)
                 {
                     return NotFound();
+                }
+                if (request.Status == "Approved")
+                {
+                    return BadRequest("Không thể xóa yêu cầu đã được duyệt.");
                 }
 
                 context.WithdrawalRequests.Remove(request);

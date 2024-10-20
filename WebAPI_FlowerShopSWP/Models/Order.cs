@@ -25,7 +25,7 @@ public partial class Order
 
     public OrderDelivery? OrderDelivery { get; set; }
 
-
+    [JsonIgnore]
     public virtual User User { get; set; } = null!;
 
 

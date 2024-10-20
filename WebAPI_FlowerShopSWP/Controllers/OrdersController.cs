@@ -244,7 +244,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     return Unauthorized("Invalid user ID");
                 }
 
-                if (currentUserId != dto.UserId) // Thay đổi từ SellerId sang UserId
+                if (currentUserId != dto.UserId) 
                 {
                     return Forbid("You are not authorized to update this order");
                 }
