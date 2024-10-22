@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IConfiguration _configuration;
         private readonly IEmailSender _emailSender;
+        private readonly IWebHostEnvironment _webHostEnvironment;
 
         public UsersController(FlowerEventShopsContext context, IConfiguration configuration, IEmailSender emailSender, IWebHostEnvironment webHostEnvironment)
         {
@@ -33,6 +35,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _configuration = configuration;
             _webHostEnvironment = webHostEnvironment;
             _emailSender = emailSender;
+            _webHostEnvironment = webHostEnvironment;
         }
         // GET: api/Users
         [HttpGet]
@@ -632,6 +635,81 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return NoContent();
         }
+        [HttpGet("revenue/{sellerId}")]
+        public async Task<IActionResult> GetRevenue(int sellerId)
+        {
+            var completedOrderItems = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Flower)
+                .ToListAsync();
+
+            var totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
+            var commission = totalRevenue * (decimal)0.30;
+            var netRevenue = totalRevenue - commission;
+
+            var revenueDetails = completedOrderItems
+                .Where(oi => oi.Order.OrderDate.HasValue)
+                .GroupBy(oi => new { Day = oi.Order.OrderDate.Value.Date })
+                .Select(g => new
+                {
+                    Date = g.Key.Day.ToString("dd/MM/yyyy"),
+                    Amount = g.Sum(oi => oi.Price * oi.Quantity)
+                })
+                .ToList();
+
+            var result = new
+            {
+                TotalRevenue = totalRevenue,
+                Commission = commission,
+                NetRevenue = netRevenue,
+                Details = revenueDetails
+            };
+
+            return Ok(result);
+        }
+
+        [Authorize]
+        [HttpPost]
+        [Route("api/withdrawal")]
+        public IActionResult CreateWithdrawalRequest([FromBody] WithdrawalRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrEmpty(request.AccountNumber) ||
+                string.IsNullOrEmpty(request.FullName) ||
+                string.IsNullOrEmpty(request.Phone) ||
+                request.Amount <= 0)
+            {
+                return BadRequest("Vui lòng cung cấp đầy đủ thông tin hợp lệ.");
+            }
+
+            request.Remarks ??= null;
+
+
+            request.Status = "Pending";
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim != null)
+            {
+                request.UserId = int.Parse(userIdClaim.Value);
+            }
+
+
+            using (var context = new FlowerEventShopsContext())
+            {
+                context.WithdrawalRequests.Add(request);
+                context.SaveChanges();
+            }
+
+            return Ok("Yêu cầu rút tiền đã được gửi.");
+        }
+
+
+
+
+
+
+
+
 
         [Authorize]
         [HttpPost("change-password")]
@@ -672,6 +750,72 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return StatusCode(500, "Đã xảy ra lỗi khi đổi mật khẩu.");
             }
         }
+        [Authorize]
+        [HttpGet("api/users/{userId}/revenue")]
+        public async Task<IActionResult> GetUserRevenue(int userId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+
+                var totalRevenue = await context.OrderItems
+                    .Where(oi => oi.Flower.UserId == userId && oi.Order.OrderStatus == "Completed")
+                    .SumAsync(oi => oi.Price * oi.Quantity);
+
+
+                var commission = totalRevenue * (decimal)0.30;
+
+
+                var totalWithdrawn = await context.WithdrawalRequests
+                    .Where(wr => wr.UserId == userId && wr.Status == "Approved")
+                    .SumAsync(wr => wr.Amount);
+
+
+                var currentIncome = totalRevenue - commission - totalWithdrawn;
+
+                return Ok(new
+                {
+                    UserId = userId,
+                    TotalRevenue = totalRevenue,
+                    Commission = commission,
+                    TotalWithdrawn = totalWithdrawn,
+                    CurrentIncome = currentIncome
+                });
+            }
+        }
+        [Authorize]
+        [HttpGet("api/withdrawal-requests/{userId}")]
+        public IActionResult GetWithdrawalRequests(int userId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var requests = context.WithdrawalRequests
+                    .Where(r => r.UserId == userId)
+                    .ToList();
+                return Ok(requests);
+            }
+        }
+        [Authorize]
+        [HttpDelete("api/withdrawal-requests/{requestId}")]
+        public IActionResult CancelWithdrawalRequest(int requestId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = context.WithdrawalRequests.Find(requestId);
+                if (request == null)
+                {
+                    return NotFound();
+                }
+                if (request.Status == "Approved")
+                {
+                    return BadRequest("Không thể xóa yêu cầu đã được duyệt.");
+                }
+
+                context.WithdrawalRequests.Remove(request);
+                context.SaveChanges();
+                return Ok();
+            }
+        }
+
 
         public class UserDto
         {

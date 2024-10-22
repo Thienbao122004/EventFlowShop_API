@@ -244,7 +244,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     return Unauthorized("Invalid user ID");
                 }
 
-                if (currentUserId != dto.UserId) // Thay đổi từ SellerId sang UserId
+                if (currentUserId != dto.UserId) 
                 {
                     return Forbid("You are not authorized to update this order");
                 }
@@ -436,15 +436,106 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteOrder(int id)
         {
-            var order = await _context.Orders.FindAsync(id);
+            var order = await _context.Orders
+                .Include(o => o.OrderItems)
+                .Include(o => o.Payments)
+                
+                .FirstOrDefaultAsync(o => o.OrderId == id);
+
             if (order == null)
             {
                 return NotFound();
             }
+            // Xóa tất cả các mục trong bảng Payments
+            _context.Payments.RemoveRange(order.Payments);
 
+            // Xóa tất cả các mục trong bảng Order_Items
+            _context.OrderItems.RemoveRange(order.OrderItems);
+
+            // Xóa đơn hàng
             _context.Orders.Remove(order);
-            await _context.SaveChangesAsync(); return NoContent();
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
+
+
+
+
+
+        [HttpGet("orders/seller/{sellerId}")]
+        public async Task<IActionResult> GetOrdersBySeller(int sellerId)
+        {
+            var orders = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Order.User)
+                .Select(oi => new
+                {
+                    oi.Order.OrderId,
+                    oi.Order.OrderDate,
+                    oi.Order.OrderStatus,
+                    oi.Order.DeliveryAddress,
+                    OrderDelivery = oi.Order.OrderDelivery.HasValue ? oi.Order.OrderDelivery.Value.ToString() : "N/A",
+                    oi.Order.TotalAmount,
+                    BuyerName = oi.Order.User.FullName,
+                    BuyerEmail = oi.Order.User.Email,
+                    BuyerPhone = oi.Order.User.Phone,
+                    ProductName = oi.Flower.FlowerName,
+                    Quantity = oi.Quantity,
+                    ItemTotal = oi.Quantity * oi.Price
+                })
+                .ToListAsync();
+
+            return Ok(orders);
+        }
+        [HttpPut("update/{orderId}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateOrder(int orderId, [FromBody] UpdateOrderDto updateOrderDto)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized("Invalid user ID");
+            }
+
+            var order = await _context.Orders
+                .Include(o => o.OrderItems)
+                .FirstOrDefaultAsync(o => o.OrderId == orderId && o.UserId == userId);
+
+            if (order == null)
+            {
+                return NotFound("Order not found or you don't have permission to update this order");
+            }
+
+            order.DeliveryAddress = updateOrderDto.DeliveryAddress;
+            foreach (var item in order.OrderItems)
+            {
+                item.Quantity = updateOrderDto.Quantity; 
+            }
+            order.TotalAmount = order.OrderItems.Sum(oi => oi.Price * updateOrderDto.Quantity); 
+
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.Email = updateOrderDto.BuyerEmail;
+                user.Phone = updateOrderDto.BuyerPhone;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+        public class UpdateOrderDto
+        {
+            public string DeliveryAddress { get; set; }
+            public int Quantity { get; set; }
+            public string BuyerEmail { get; set; }
+            public string BuyerPhone { get; set; }
+        }
+
+
 
         private bool OrderExists(int id)
         {

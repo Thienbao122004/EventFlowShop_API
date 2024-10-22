@@ -11,6 +11,7 @@ using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.DTO;
 using WebAPI_FlowerShopSWP.Dto;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -27,6 +28,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             _httpClientFactory = httpClientFactory;
             _logger = logger;
             _ghnSettings = ghnSettings.Value;
+            _cache = cache;
             _cache = cache;
         }
 

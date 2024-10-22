@@ -27,6 +27,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private readonly ILogger<PaymentsController> _logger;
         private readonly IEmailSender _emailSender;
         private readonly IMemoryCache _memoryCache;
+        private readonly IMemoryCache _memoryCache;
 
         public PaymentsController(
             FlowerEventShopsContext context,
@@ -34,11 +35,14 @@ namespace WebAPI_FlowerShopSWP.Controllers
             ILogger<PaymentsController> logger,
             IEmailSender emailSender,
             IMemoryCache memoryCache)
+            IEmailSender emailSender,
+            IMemoryCache memoryCache)
         {
             _context = context;
             _vnpayConfig = vnpayConfig.Value;
             _logger = logger;
             _emailSender = emailSender;
+            _memoryCache = memoryCache;
             _memoryCache = memoryCache;
         }
 
@@ -49,6 +53,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [Authorize]
         [HttpPost("createVnpPayment")]
+        public async Task<IActionResult> CreateVnpPayment([FromBody] PaymentRequest request)
         public async Task<IActionResult> CreateVnpPayment([FromBody] PaymentRequest request)
         {
             if (!ModelState.IsValid)
@@ -64,8 +69,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             _logger.LogInformation("Starting payment process for user {UserId}, amount: {Amount}", userId, request.Amount);
 
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            _logger.LogInformation("Starting payment process for user {UserId}, amount: {Amount}", userId, request.Amount);
+
             var vnpay = new VnPayLibrary();
             var vnp_Returnurl = "http://localhost:5173/payment-result";
+            var vnp_TxnRef = DateTime.Now.Ticks.ToString();
             var vnp_TxnRef = DateTime.Now.Ticks.ToString();
             var vnp_OrderInfo = "order";
             var vnp_OrderType = "other";
@@ -108,6 +117,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             string paymentUrl = vnpay.CreateRequestUrl(vnp_Url, vnp_HashSecret);
             _logger.LogInformation("Generated payment URL: {PaymentUrl}", paymentUrl);
             _logger.LogInformation("Payment process completed successfully for user {UserId}", userId);
+            _logger.LogInformation("Payment process completed successfully for user {UserId}", userId);
             return Ok(new { paymentUrl });
         }
         [HttpGet("vnpay-return")]
@@ -137,6 +147,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest(new { status = "error", message = "Invalid signature" });
             }
 
+            if (!_memoryCache.TryGetValue($"TxnRef_{vnp_TxnRef}", out int orderId))
             if (!_memoryCache.TryGetValue($"TxnRef_{vnp_TxnRef}", out int orderId))
             {
                 _logger.LogError("No matching order found for TxnRef: {TxnRef}", vnp_TxnRef);

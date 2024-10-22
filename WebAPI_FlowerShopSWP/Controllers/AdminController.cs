@@ -6,7 +6,9 @@ using System.Security.Claims;
 using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP.Controllers
+
 {
+    
     [Authorize(Roles = "Admin")]
     [Route("api/[controller]")]
     [ApiController]
@@ -14,7 +16,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
     {
         private readonly FlowerEventShopsContext _context;
         private readonly ILogger<AdminController> _logger;
+        private readonly ILogger<AdminController> _logger;
 
+        public AdminController(FlowerEventShopsContext context, ILogger<AdminController> logger)
         public AdminController(FlowerEventShopsContext context, ILogger<AdminController> logger)
         {
             _context = context;
@@ -345,21 +349,34 @@ namespace WebAPI_FlowerShopSWP.Controllers
         [HttpDelete("orders/{id}")]
         public async Task<IActionResult> DeleteOrder(int id)
         {
-            var order = await _context.Orders
-                .Include(o => o.Payments)
-                .FirstOrDefaultAsync(o => o.OrderId == id);
-
-            if (order == null)
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                return NotFound();
+                var order = await _context.Orders
+                    .Include(o => o.OrderItems) 
+                    .Include(o => o.Payments) 
+                    .FirstOrDefaultAsync(o => o.OrderId == id);
+
+                if (order == null)
+                {
+                    return NotFound();
+                }
+
+                _context.OrderItems.RemoveRange(order.OrderItems);
+
+                _context.Payments.RemoveRange(order.Payments);
+
+                _context.Orders.Remove(order);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+                return NoContent();
             }
-
-            _context.Payments.RemoveRange(order.Payments);
-            _context.Orders.Remove(order);
-
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, "Lỗi khi xóa đơn hàng: " + ex.Message);
+            }
         }
 
         // Get order details
@@ -413,7 +430,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(stats);
         }
 
-        // Get daily income
         [HttpGet("dashboard/income")]
         public async Task<IActionResult> GetDailyIncome()
         {
@@ -430,5 +446,101 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(dailyIncome);
         }
+        [Authorize]
+        [HttpGet("api/withdrawal-requests")]
+        public IActionResult GetWithdrawalRequests()
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var requests = context.WithdrawalRequests.ToList();
+                return Ok(requests);
+            }
+        }
+
+        [Authorize]
+        [HttpPut("api/withdrawal-request/{id}")]
+        public IActionResult UpdateWithdrawalRequest(int id, [FromBody] string status)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = context.WithdrawalRequests.Find(id);
+                if (request == null)
+                {
+                    return NotFound();
+                }
+
+                request.Status = status;
+                context.SaveChanges();
+
+                return Ok("Trạng thái yêu cầu đã được cập nhật.");
+            }
+        }
+        [Authorize]
+        [HttpPost("api/withdrawals/{requestId}/approve")]
+        public async Task<IActionResult> ApproveWithdrawalRequest(int requestId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = await context.WithdrawalRequests.FindAsync(requestId);
+                if (request == null)
+                {
+                    return NotFound("Yêu cầu không tồn tại.");
+                }
+       
+                request.Status = "Approved";
+
+                var user = await context.Users.FindAsync(request.UserId);
+                if (user == null)
+                {
+                    return NotFound("Người dùng không tồn tại.");
+                }
+
+                
+                var totalRevenue = await context.OrderItems
+                    .Where(oi => oi.Flower.UserId == user.UserId && oi.Order.OrderStatus == "Completed")
+                    .SumAsync(oi => oi.Price * oi.Quantity);
+
+                
+                if (totalRevenue < request.Amount)
+                {
+                    return BadRequest("Doanh thu không đủ để thực hiện yêu cầu rút tiền.");
+                }
+
+                totalRevenue -= request.Amount;
+
+
+                await context.SaveChangesAsync();
+
+                return Ok("Yêu cầu đã được duyệt và doanh thu đã được cập nhật.");
+            }
+        }
+        // Get order statistics
+        [HttpGet("dashboard/orders")]
+        public async Task<IActionResult> GetOrderStats()
+        {
+            try
+            {
+                var orderStats = await _context.Orders
+                    .GroupBy(o => o.OrderDate.Value.Date) 
+                    .Select(g => new
+                    {
+                        Date = g.Key,
+                        Count = g.Count() 
+                    })
+                    .ToListAsync();
+
+                return Ok(orderStats);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error fetching order stats: " + ex.Message);
+                return StatusCode(500, "Lỗi khi tải dữ liệu thống kê đơn hàng.");
+            }
+        }
+        public class AdminUpdateOrderDeliveryDto
+        {
+            public string OrderDelivery { get; set; } 
+        }
+
     }
 }

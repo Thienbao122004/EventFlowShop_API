@@ -178,10 +178,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             var averageRating = reviews.Any() ? reviews.Average(r => r.Rating) : 0;
             var totalReviews = reviews.Count;
+            var totalReviews = reviews.Count;
 
             var result = new
             {
                 AverageRating = Math.Round(averageRating, 2),
+                TotalReviews = totalReviews,
                 TotalReviews = totalReviews,
                 Reviews = reviews
             };

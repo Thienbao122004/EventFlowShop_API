@@ -43,7 +43,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     f.Status,
                     f.ListingDate,
                     f.ImageUrl,
-                    SellerName = f.Seller.Name
+
+                    SellerName = f.Seller.Name 
+
                 })
                 .ToListAsync();
 
@@ -101,9 +103,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return flower;
         }
-
-        // PUT: api/Flowers/5
         [HttpPut("{id}")]
+        public async Task<IActionResult> PutFlower(int id, [FromForm] string FlowerName, [FromForm] decimal Price, [FromForm] int Quantity, [FromForm] string Status, [FromForm] string Category, [FromForm] IFormFile? image)
         public async Task<IActionResult> PutFlower(int id, [FromForm] string FlowerName, [FromForm] decimal Price, [FromForm] int Quantity, [FromForm] string Status, [FromForm] string Category, [FromForm] IFormFile? image)
         {
             var flower = await _context.Flowers.FindAsync(id);
@@ -146,17 +147,37 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 }
             }
 
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!FlowerExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
             return NoContent();
         }
 
+
+
+
         [Authorize]
+
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
- [FromForm] string FlowerName,
- [FromForm] decimal Price,
- [FromForm] int Quantity,
- [FromForm] int CategoryId,
- [FromForm] IFormFile? image)
+         [FromForm] string FlowerName,
+         [FromForm] decimal Price,
+         [FromForm] int Quantity,
+         [FromForm] int CategoryId,
+         [FromForm] IFormFile? image)
         {
             try
             {
@@ -355,11 +376,13 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public IActionResult GetCategories()
         {
 
+            
             var categories = _context.Categories
-                .Select(c => new { c.CategoryName })
+                .Select(c => new { c.CategoryName }) 
                 .ToList();
 
-            return Ok(categories);
+            return Ok(categories); 
+
         }
 
 

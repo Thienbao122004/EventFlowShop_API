@@ -32,6 +32,7 @@ public partial class Flower
     public string? ImageUrl { get; set; }
    
 
+
     [JsonIgnore] 
     public virtual Category? Category { get; set; } = null!;
 

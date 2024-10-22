@@ -25,7 +25,10 @@ public partial class Order
 
     public OrderDelivery? OrderDelivery { get; set; }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 6c453a7648ab255e580b4b0971f831e5e9368d48
     [JsonIgnore]
     public virtual User User { get; set; } = null!;
 
@@ -33,9 +36,9 @@ public partial class Order
 
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
 
-    
+    [JsonIgnore]
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 
-    
+    [JsonIgnore]
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
