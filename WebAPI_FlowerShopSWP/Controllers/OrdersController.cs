@@ -316,7 +316,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                         DeliveryAddress = string.IsNullOrEmpty(fullAddress) ? user.Address : fullAddress,
                         OrderDelivery = OrderDelivery.ChờXửLý,
                         OrderItems = new List<OrderItem>()
-                    }; 
+                    };
 
                     decimal totalAmount = 0;
                     foreach (var cartItem in cartItems)
@@ -366,30 +366,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 }
             }
         }
-
-
-        private async Task SendConfirmationEmail(User user, Order order, decimal totalAmount)
-        {
-            string emailSubject = "Xác nhận đơn hàng";
-            string emailBody = $@"
-    Xin chào {user.Name},
-
-    Đơn hàng của bạn đã được xác nhận thành công.
-
-    Chi tiết đơn hàng:
-    - Mã đơn hàng: {order.OrderId}
-    - Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
-    - Tổng giá trị: {totalAmount:N0} VNĐ
-
-    Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
-
-    Trân trọng,
-    Đội ngũ hỗ trợ khách hàng";
-
-            await _emailSender.SendEmailAsync(user.Email, emailSubject, emailBody);
-            _logger.LogInformation("Confirmation email sent to {UserEmail}", user.Email);
-        }
-
 
 
         // PUT: api/Orders/5

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 namespace WebAPI_FlowerShopSWP.Models;
@@ -25,6 +26,9 @@ public partial class User
     public string? Phone { get; set; }
 
     public string? ProfileImageUrl { get; set; }
+
+    [NotMapped]
+    public IFormFile? ProfileImageFile { get; set; }
 
     public DateTime? RegistrationDate { get; set; }
 

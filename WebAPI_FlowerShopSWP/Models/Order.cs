@@ -26,10 +26,11 @@ public partial class Order
     public OrderDelivery? OrderDelivery { get; set; }
 
 
+    [JsonIgnore]
     public virtual User User { get; set; } = null!;
 
 
-    
+
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
 
     

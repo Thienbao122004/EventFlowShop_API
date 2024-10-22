@@ -222,6 +222,22 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             _logger.LogInformation("Preparing to send confirmation email to {UserEmail}", user.Email);
 
+            // Fetch order items
+            var orderItems = await _context.OrderItems
+                .Where(oi => oi.OrderId == order.OrderId)
+                .Include(oi => oi.Flower)
+                .ToListAsync();
+
+            string itemsList = "";
+            decimal subtotal = 0;
+
+            foreach (var item in orderItems)
+            {
+                decimal itemTotal = item.Quantity * item.Price;
+                subtotal += itemTotal;
+                itemsList += $"- {item.FlowerName} x {item.Quantity}: {itemTotal:N0} VNĐ\n";
+            }
+
             string emailSubject = "Xác nhận đơn hàng và thanh toán";
             string emailBody = $@"
 Xin chào {user.Name},
@@ -231,7 +247,12 @@ Xin chào {user.Name},
 Chi tiết đơn hàng:
 - Mã đơn hàng: {order.OrderId}
 - Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
-- Tổng giá trị: {totalAmount:N0} VNĐ
+
+Các món đã đặt:
+{itemsList}
+Tổng phụ: {subtotal:N0} VNĐ
+Phí vận chuyển: {(totalAmount - subtotal):N0} VNĐ
+Tổng cộng: {totalAmount:N0} VNĐ
 
 Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
 

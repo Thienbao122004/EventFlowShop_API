@@ -22,7 +22,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         // GET: api/OrderItems
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<OrderItem>>> GetOrderItems()
+        public async Task<ActionResult<IEnumerable<OrderItem>>> GetOrderItems()    
         {
             return await _context.OrderItems.ToListAsync();
         }

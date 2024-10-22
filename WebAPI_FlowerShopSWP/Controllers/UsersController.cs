@@ -157,10 +157,18 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 return Conflict("Email already in use.");
             }
+            if (_context.Users.Any(u => u.Email == newUser.Email))
+            {
+                return Conflict("Email already in use.");
+            }
+
+            if (_context.Users.Any(u => u.Name == newUser.Name))
+            {
+                return Conflict("Username already in use.");
+            }
 
             if (string.IsNullOrWhiteSpace(newUser.Name) || string.IsNullOrWhiteSpace(newUser.FullName) ||
-                string.IsNullOrWhiteSpace(newUser.Email) || string.IsNullOrWhiteSpace(newUser.Password) ||
-                string.IsNullOrWhiteSpace(newUser.Address))
+                string.IsNullOrWhiteSpace(newUser.Email) || string.IsNullOrWhiteSpace(newUser.Password))
             {
                 return BadRequest("All fields are required.");
             }
@@ -293,56 +301,184 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [Authorize]
         [HttpPut("profile")]
-        public async Task<IActionResult> UpdateUserProfile([FromForm] User updatedUser, IFormFile profileImage)
+        public async Task<IActionResult> UpdateUserProfile([FromForm] User updatedUser)
         {
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            var user = await _context.Users.FindAsync(userId);
-
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            user.Name = updatedUser.Name;
-            user.Email = updatedUser.Email;
-            user.FullName = updatedUser.FullName;
-            user.Phone = updatedUser.Phone;
-            user.Address = updatedUser.Address;
-
-            if (profileImage != null && profileImage.Length > 0)
-            {
-                var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads");
-                if (!Directory.Exists(uploadsFolder))
-                    Directory.CreateDirectory(uploadsFolder);
-
-                var uniqueFileName = Guid.NewGuid().ToString() + "_" + profileImage.FileName;
-                var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-                using (var fileStream = new FileStream(filePath, FileMode.Create))
-                {
-                    await profileImage.CopyToAsync(fileStream);
-                }
-
-                user.ProfileImageUrl = "/uploads/" + uniqueFileName;
-            }
-
             try
             {
+                var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+                var user = await _context.Users.FindAsync(userId);
+
+                if (user == null)
+                {
+                    return NotFound("User not found");
+                }
+
+                // Chỉ cập nhật các trường được phép
+                user.Name = updatedUser.Name ?? user.Name;
+                user.FullName = updatedUser.FullName ?? user.FullName;
+                user.Email = updatedUser.Email ?? user.Email;
+                user.Phone = updatedUser.Phone ?? user.Phone;
+                user.Address = updatedUser.Address ?? user.Address;
+
+                // Xử lý upload ảnh
+                if (updatedUser.ProfileImageFile != null && updatedUser.ProfileImageFile.Length > 0)
+                {
+                    var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads");
+                    if (!Directory.Exists(uploadsFolder))
+                        Directory.CreateDirectory(uploadsFolder);
+
+                    var uniqueFileName = Guid.NewGuid().ToString() + "_" + updatedUser.ProfileImageFile.FileName;
+                    var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await updatedUser.ProfileImageFile.CopyToAsync(fileStream);
+                    }
+
+                    user.ProfileImageUrl = "/uploads/" + uniqueFileName;
+                }
+
                 await _context.SaveChangesAsync();
+                return Ok(new { message = "Profile updated successfully", user = user });
             }
-            catch (DbUpdateConcurrencyException)
+            catch (Exception ex)
             {
-                if (!UserExists(userId))
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
+        }
+
+        [HttpGet("revenue/{sellerId}")]
+        public async Task<IActionResult> GetRevenue(int sellerId)
+        {
+            var completedOrderItems = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Flower)
+                .ToListAsync();
+
+            var totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
+            var commission = totalRevenue * (decimal)0.30;
+            var netRevenue = totalRevenue - commission;
+
+            var revenueDetails = completedOrderItems
+                .Where(oi => oi.Order.OrderDate.HasValue)
+                .GroupBy(oi => new { Day = oi.Order.OrderDate.Value.Date })
+                .Select(g => new
+                {
+                    Date = g.Key.Day.ToString("dd/MM/yyyy"),
+                    Amount = g.Sum(oi => oi.Price * oi.Quantity)
+                })
+                .ToList();
+
+            var result = new
+            {
+                TotalRevenue = totalRevenue,
+                Commission = commission,
+                NetRevenue = netRevenue,
+                Details = revenueDetails
+            };
+
+            return Ok(result);
+        }
+
+        [Authorize]
+        [HttpPost]
+        [Route("api/withdrawal")]
+        public IActionResult CreateWithdrawalRequest([FromBody] WithdrawalRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrEmpty(request.AccountNumber) ||
+                string.IsNullOrEmpty(request.FullName) ||
+                string.IsNullOrEmpty(request.Phone) ||
+                request.Amount <= 0)
+            {
+                return BadRequest("Vui lòng cung cấp đầy đủ thông tin hợp lệ.");
+            }
+
+            request.Remarks ??= null;
+
+
+            request.Status = "Pending";
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim != null)
+            {
+                request.UserId = int.Parse(userIdClaim.Value);
+            }
+
+
+            using (var context = new FlowerEventShopsContext())
+            {
+                context.WithdrawalRequests.Add(request);
+                context.SaveChanges();
+            }
+
+            return Ok("Yêu cầu rút tiền đã được gửi.");
+        }
+
+        [Authorize]
+        [HttpGet("api/users/{userId}/revenue")]
+        public async Task<IActionResult> GetUserRevenue(int userId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+
+                var totalRevenue = await context.OrderItems
+                    .Where(oi => oi.Flower.UserId == userId && oi.Order.OrderStatus == "Completed")
+                    .SumAsync(oi => oi.Price * oi.Quantity);
+
+
+                var commission = totalRevenue * (decimal)0.30;
+
+
+                var totalWithdrawn = await context.WithdrawalRequests
+                    .Where(wr => wr.UserId == userId && wr.Status == "Approved")
+                    .SumAsync(wr => wr.Amount);
+
+
+                var currentIncome = totalRevenue - commission - totalWithdrawn;
+
+                return Ok(new
+                {
+                    UserId = userId,
+                    TotalRevenue = totalRevenue,
+                    Commission = commission,
+                    TotalWithdrawn = totalWithdrawn,
+                    CurrentIncome = currentIncome
+                });
+            }
+        }
+        [Authorize]
+        [HttpGet("api/withdrawal-requests/{userId}")]
+        public IActionResult GetWithdrawalRequests(int userId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var requests = context.WithdrawalRequests
+                    .Where(r => r.UserId == userId)
+                    .ToList();
+                return Ok(requests);
+            }
+        }
+        [Authorize]
+        [HttpDelete("api/withdrawal-requests/{requestId}")]
+        public IActionResult CancelWithdrawalRequest(int requestId)
+        {
+            using (var context = new FlowerEventShopsContext())
+            {
+                var request = context.WithdrawalRequests.Find(requestId);
+                if (request == null)
                 {
                     return NotFound();
                 }
-                else
+                if (request.Status == "Approved")
                 {
-                    throw;
+                    return BadRequest("Không thể xóa yêu cầu đã được duyệt.");
                 }
-            }
 
-            return Ok(user);
+                context.WithdrawalRequests.Remove(request);
+                context.SaveChanges();
+                return Ok();
+            }
         }
 
         [Authorize]

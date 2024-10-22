@@ -39,7 +39,9 @@ using WebAPI_FlowerShopSWP.Controllers;
 
         public DbSet<SellerRegistrationRequest> SellerRegistrationRequests { get; set; }
 
-    public virtual DbSet<SellerFollow> SellerFollows { get; set; }
+        public virtual DbSet<SellerFollow> SellerFollows { get; set; }
+
+        public virtual DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
 
 
 
@@ -80,6 +82,8 @@ using WebAPI_FlowerShopSWP.Controllers;
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Conversations_Users");
         });
+
+
 
         modelBuilder.Entity<Delivery>(entity =>
             {
@@ -398,7 +402,25 @@ using WebAPI_FlowerShopSWP.Controllers;
               .HasColumnName("profileImageUrl");
     });
 
-      
+        modelBuilder.Entity<WithdrawalRequest>()
+        .HasKey(w => w.RequestId); // Đảm bảo rằng RequestId được chỉ định là khóa chính
+
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.HasKey(e => e.CategoryId).HasName("PK__Categori__23CAF1D89BCF6E4B");
+
+            entity.Property(e => e.CategoryId).HasColumnName("categoryId");
+            entity.Property(e => e.CategoryName)
+                .HasMaxLength(100)
+                .HasColumnName("categoryName");
+            entity.Property(e => e.Description)
+                .HasMaxLength(255)
+                .HasColumnName("description");
+        });
+
+
         OnModelCreatingPartial(modelBuilder);
     }
 
