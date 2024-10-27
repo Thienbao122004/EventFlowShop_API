@@ -1,46 +1,71 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http;
 
-namespace WebAPI_FlowerShopSWP.Models;
-
-public partial class User
+namespace WebAPI_FlowerShopSWP.Models
 {
-    [Key]
-    public int UserId { get; set; }
+    public partial class User
+    {
+        public User()
+        {
+            Deliveries = new HashSet<Delivery>();
 
-    public string Name { get; set; } = null!;
+            Flowers = new HashSet<Flower>();
 
-    public string? FullName { get; set; }
+            Messages = new HashSet<Message>();
 
-    public string? ProfileImageUrl { get; set; }
-    public string? Email { get; set; }
+            Notifications = new HashSet<Notification>();
 
-    public string? Password { get; set; }
+            Orders = new HashSet<Order>();
 
-    public string? UserType { get; set; }
+            Reviews = new HashSet<Review>();
 
-    public string? Address { get; set; }
+            Following = new HashSet<SellerFollow>();
 
-    public string? Phone { get; set; }
+            Followers = new HashSet<SellerFollow>();
 
-    public DateTime? RegistrationDate { get; set; }
+            SellerConversations = new HashSet<Conversation>();
 
-    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
-    public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
+            BuyerConversations = new HashSet<Conversation>();
 
-    public virtual ICollection<Flower> Flowers { get; set; } = new List<Flower>();
+        }
 
-    public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
+        [Key]
+        public int UserId { get; set; }
+        public string Name { get; set; } = null!;
+        public string? FullName { get; set; }
+        public string? Email { get; set; }
+        public string? Password { get; set; }
+        public string? UserType { get; set; }
+        public string? Address { get; set; }
+        public string? WardCode { get; set; }
+        public int? DistrictId { get; set; }
+        public string? Phone { get; set; }
+        public string? ProfileImageUrl { get; set; }
+        public DateTime? RegistrationDate { get; set; }
 
-    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+        [NotMapped]
+        public IFormFile? ProfileImageFile { get; set; }
 
-    public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
+        // Navigation properties
+        public virtual ICollection<Delivery> Deliveries { get; set; }
+        public virtual ICollection<Flower> Flowers { get; set; }
+        public virtual ICollection<Message> Messages { get; set; }
+        public virtual ICollection<Notification> Notifications { get; set; }
+        public virtual ICollection<Order> Orders { get; set; }
+        public virtual ICollection<Review> Reviews { get; set; }
 
-    public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
-    [JsonIgnore]
-    public ICollection<SellerFollow>? Following { get; set; }
-    [JsonIgnore]
-    public ICollection<SellerFollow>? Followers { get; set; }
+        [JsonIgnore]
+        public virtual ICollection<SellerFollow> Following { get; set; }
+
+        [JsonIgnore]
+        public virtual ICollection<SellerFollow> Followers { get; set; }
+
+        // Chat-related navigation properties
+        public virtual ICollection<Conversation> SellerConversations { get; set; }
+        public virtual ICollection<Conversation> BuyerConversations { get; set; }
+    }
 }

@@ -44,7 +44,8 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     f.ListingDate,
                     f.ImageUrl,
 
-                    SellerName = f.Seller.Name 
+                    SellerName = f.Seller.Name ,
+                    IsAvailableForPurchase = f.IsAvailableForPurchase
 
                 })
                 .ToListAsync();
@@ -157,7 +158,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
          [FromForm] decimal Price,
          [FromForm] int Quantity,
          [FromForm] int CategoryId,
+         [FromForm] string Condition,
          [FromForm] IFormFile? image)
+        
         {
             try
             {
@@ -178,7 +181,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     Quantity = Quantity,
                     CategoryId = CategoryId,
                     UserId = userId,
-                    Condition = "New",
+                    Condition = Condition,
                     Status = "Available",
                     ListingDate = DateTime.UtcNow
                 };

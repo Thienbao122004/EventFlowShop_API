@@ -95,7 +95,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
                 var user = new User
                 {
-                    UserId = newUserId, // Gán UserId mới
+                    //UserId = newUserId, // Gán UserId mới
                     Email = request.Email,
                     FullName = request.FullName,
                     Name = request.Email.Split('@')[0], // Tạo username từ email

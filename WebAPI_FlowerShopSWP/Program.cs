@@ -16,7 +16,10 @@ using WebAPI_FlowerShopSWP.Configurations;
 using Microsoft.Extensions.Options;
 using WebAPI_FlowerShopSWP.Dto;
 using WebAPI_FlowerShopSWP.Services;
-using Microsoft.Extensions.Caching.Memory;
+using AutoMapper;
+using WebAPI_FlowerShopSWP.Mappings;
+using Microsoft.AspNetCore.Http.Features;
+using System.IO;
 
 namespace WebAPI_FlowerShopSWP
 {
@@ -34,13 +37,14 @@ namespace WebAPI_FlowerShopSWP
             {
                 Directory.CreateDirectory(imagesPath);
             }
+
             var builder = WebApplication.CreateBuilder(args);
             builder.Configuration.AddEnvironmentVariables();
             var secretKey = builder.Configuration["Jwt:SecretKey"];
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
-
             builder.Services.AddMemoryCache();
             builder.Services.AddTransient<IEmailSender, EmailSender>();
+            builder.Services.AddScoped<IChatService, ChatService>();
             builder.Services.AddScoped<ShippingController>();
             builder.Services.AddCors(options =>
             {
@@ -56,7 +60,7 @@ namespace WebAPI_FlowerShopSWP
                     });
             });
 
-
+            builder.Services.AddScoped<INotificationService, NotificationService>();
             builder.Services.AddControllers()
      .AddJsonOptions(options =>
      {
@@ -101,12 +105,15 @@ namespace WebAPI_FlowerShopSWP
                 });
             });
 
-
             builder.Services.AddDbContext<FlowerEventShopsContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("ConnectDB")));
             builder.Services.AddSignalR(options =>
             {
                 options.EnableDetailedErrors = true;
+            });
+            builder.Services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = 5 * 1024 * 1024; // 5MB
             });
             builder.Services.AddAuthentication(options =>
             {
@@ -174,7 +181,8 @@ namespace WebAPI_FlowerShopSWP
                 client.DefaultRequestHeaders.Add("Token", ghnSettings.Token);
             });
             builder.Services.AddScoped<ISellerFollowService, SellerFollowService>();
-
+            builder.Services.AddAutoMapper(typeof(MappingProfile));
+            builder.Services.AddScoped<INotificationService, NotificationService>();
             var app = builder.Build();
             app.Environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 
@@ -188,8 +196,14 @@ namespace WebAPI_FlowerShopSWP
             app.UseHttpsRedirection();
             app.UseHttpsRedirection();
             app.UseStaticFiles();
-
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(
+        Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "chat-images")),
+                RequestPath = "/chat-images"
+            });
             app.UseCors("AllowSpecificOrigin");
+            app.UseCors("AllowReactApp");
 
             app.UseRouting();
 
@@ -199,7 +213,20 @@ namespace WebAPI_FlowerShopSWP
             app.MapControllers();
 
             app.MapHub<ChatHub>("/chathub");
+            app.MapHub<NotificationHub>("/notificationHub");
+            var uploadDirectory = Path.Combine(builder.Environment.WebRootPath, "chat-images");
+            if (!Directory.Exists(uploadDirectory))
+            {
+                Directory.CreateDirectory(uploadDirectory);
+            }
 
+            app.UseStaticFiles();
+
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(uploadDirectory),
+                RequestPath = "/chat-images"
+            });
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(

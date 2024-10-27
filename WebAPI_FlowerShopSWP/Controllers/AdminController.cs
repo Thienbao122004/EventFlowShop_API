@@ -115,14 +115,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 order.OrderStatus,
                 order.DeliveryAddress,
                 OrderDelivery = order.OrderDelivery.HasValue ? order.OrderDelivery.Value.ToString() : "N/A",
-                UserName = order.User.Name,
+                UserName = order.User?.Name ?? "Unknown",
+                WardCode = order.WardCode ?? "N/A",
+                WardName = order.WardName ?? "N/A",
+                Note = order.Note ?? "N/A",
                 OrderItems = order.OrderItems.Select(oi => new
                 {
                     oi.OrderItemId,
                     oi.FlowerId,
                     oi.Quantity,
                     oi.Price,
-                    FlowerName = oi.Flower.FlowerName
+                    FlowerName = oi.Flower?.FlowerName ?? "Unknown"
                 }).ToList()
             });
 

@@ -31,7 +31,20 @@ public partial class Flower
 
     public string? ImageUrl { get; set; }
    
+    [NotMapped]
+    public bool IsAvailableForPurchase => IsWithin24Hours();
 
+    // Thêm phương thức mới
+    public bool IsWithin24Hours()
+    {
+        if (!ListingDate.HasValue)
+        {
+            return false;
+        }
+
+        TimeSpan timeSinceListing = DateTime.Now - ListingDate.Value;
+        return timeSinceListing.TotalHours < 24;
+    }
 
     [JsonIgnore] 
     public virtual Category? Category { get; set; } = null!;

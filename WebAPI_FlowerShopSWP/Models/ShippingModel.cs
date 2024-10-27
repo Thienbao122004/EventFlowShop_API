@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using WebAPI_FlowerShopSWP.Dto;
 
 namespace WebAPI_FlowerShopSWP.Models
@@ -15,7 +16,6 @@ namespace WebAPI_FlowerShopSWP.Models
 
     public class CreateOrderRequest
     {
-
         public string to_name { get; set; }
         public string from_name { get; set; }
         public string from_phone { get; set; }
@@ -28,6 +28,7 @@ namespace WebAPI_FlowerShopSWP.Models
         public string to_address { get; set; }
         public string to_ward_code { get; set; }
         public int to_district_id { get; set; }
+        public string client_order_code { get; set; }
         public int weight { get; set; }
         public int length { get; set; }
         public int width { get; set; }
@@ -35,7 +36,31 @@ namespace WebAPI_FlowerShopSWP.Models
         public int service_type_id { get; set; }
         public int payment_type_id { get; set; }
         public string required_note { get; set; }
+        public string note { get; set; }
         public List<CreateOrderItemRequest> items { get; set; }
+    }
+
+    public class ServiceRequest
+    {
+        [Required]
+        [Range(1, int.MaxValue, ErrorMessage = "From district ID must be a positive integer.")]
+        public int FromDistrict { get; set; }
+
+        [Required]
+        [Range(1, int.MaxValue, ErrorMessage = "To district ID must be a positive integer.")]
+        public int ToDistrict { get; set; }
+    }
+
+    public class ServiceResponse
+    {
+        public List<ServiceInfo> Data { get; set; }
+    }
+
+    public class ServiceInfo
+    {
+        public int service_id { get; set; }
+        public string short_name { get; set; }
+        public int service_type_id { get; set; }
     }
 
     public class CreateOrderItemRequest

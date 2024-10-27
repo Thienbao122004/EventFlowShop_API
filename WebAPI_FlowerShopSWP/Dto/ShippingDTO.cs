@@ -47,5 +47,6 @@ namespace WebAPI_FlowerShopSWP.DTO
         public string code { get; set; }
         public int quantity { get; set; }
         public int price { get; set; }
+        public int weight { get; set; }
     }
 }
