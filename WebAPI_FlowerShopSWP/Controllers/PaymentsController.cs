@@ -92,14 +92,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
             vnpay.AddRequestData("vnp_TxnRef", vnp_TxnRef);
 
             var latestOrder = await _context.Orders
-                .Where(o => o.UserId == userId)
-                .OrderByDescending(o => o.OrderDate)
-                .FirstOrDefaultAsync();
+            .Where(o => o.UserId == userId)
+            .OrderByDescending(o => o.OrderDate)
+            .Select(o => new { o.OrderId })
+            .FirstOrDefaultAsync();
 
             if (latestOrder == null)
             {
                 return BadRequest("Không tìm thấy đơn hàng.");
             }
+
+            var orderId = latestOrder.OrderId;
 
             var cacheEntryOptions = new MemoryCacheEntryOptions()
                 .SetSlidingExpiration(TimeSpan.FromMinutes(10));
@@ -143,6 +146,20 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest(new { status = "error", message = "No matching order found." });
             }
 
+            var existingPayment = await _context.Payments
+                .FirstOrDefaultAsync(p => p.OrderId == orderId);
+
+            if (existingPayment != null)
+            {
+                return Ok(new
+                {
+                    status = existingPayment.PaymentStatus == "Success" ? "success" : "failed",
+                    message = existingPayment.PaymentStatus == "Success" ?
+                        "Thanh toán đã được xử lý trước đó" :
+                        "Thanh toán thất bại đã được ghi nhận"
+                });
+            }
+
             var order = await _context.Orders.FindAsync(orderId);
             if (order == null)
             {
@@ -162,12 +179,36 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
                 try
                 {
-                    // Reduce quantity only when payment is successful
+                    // Lấy thông tin order items và user
                     var orderItems = await _context.OrderItems
                         .Where(oi => oi.OrderId == order.OrderId)
                         .Include(oi => oi.Flower)
                         .ToListAsync();
 
+                    var userId = order.UserId;
+
+                    // Lấy cart của user
+                    var userCart = await _context.Carts
+                        .Include(c => c.CartItems)
+                        .FirstOrDefaultAsync(c => c.UserId == userId && c.Status == "Active");
+
+                    if (userCart != null)
+                    {
+                        // Lấy danh sách flower IDs từ order items
+                        var orderedFlowerIds = orderItems.Select(oi => oi.FlowerId).ToList();
+
+                        // Tìm và xóa cart items tương ứng
+                        var cartItemsToRemove = userCart.CartItems
+                            .Where(ci => orderedFlowerIds.Contains(ci.FlowerId))
+                            .ToList();
+
+                        foreach (var cartItem in cartItemsToRemove)
+                        {
+                            _context.CartItems.Remove(cartItem);
+                        }
+                    }
+
+                    // Cập nhật số lượng hoa
                     foreach (var item in orderItems)
                     {
                         item.Flower.Quantity -= item.Quantity;
@@ -181,13 +222,19 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     order.OrderStatus = "Completed";
                     await _context.SaveChangesAsync();
 
+                    // Gửi email xác nhận
                     var user = await _context.Users.FindAsync(order.UserId);
                     if (user != null)
                     {
                         await SendConfirmationEmail(user, order, payment.Amount);
                     }
 
-                    return Ok(new { status = "success", message = "Thanh toán thành công" });
+                    return Ok(new
+                    {
+                        status = "success",
+                        message = "Thanh toán thành công",
+                        orderId = order.OrderId
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -215,28 +262,53 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     _logger.LogError(ex, "Error recording failed payment");
                 }
 
-                return Ok(new { status = "failed", message = $"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}" });
+                return Ok(new
+                {
+                    status = "failed",
+                    message = $"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}"
+                });
             }
         }
         private async Task SendConfirmationEmail(User user, Order order, decimal totalAmount)
         {
             _logger.LogInformation("Preparing to send confirmation email to {UserEmail}", user.Email);
 
+            // Fetch order items
+            var orderItems = await _context.OrderItems
+                .Where(oi => oi.OrderId == order.OrderId)
+                .Include(oi => oi.Flower)
+                .ToListAsync();
+
+            string itemsList = "";
+            decimal subtotal = 0;
+
+            foreach (var item in orderItems)
+            {
+                decimal itemTotal = item.Quantity * item.Price;
+                subtotal += itemTotal;
+                itemsList += $"- {item.FlowerName} x {item.Quantity}: {itemTotal:N0} VNĐ\n";
+            }
+
             string emailSubject = "Xác nhận đơn hàng và thanh toán";
             string emailBody = $@"
-Xin chào {user.Name},
+                Xin chào {user.Name},
 
-Đơn hàng của bạn đã được xác nhận và thanh toán thành công.
+                Đơn hàng của bạn đã được xác nhận và thanh toán thành công.
 
-Chi tiết đơn hàng:
-- Mã đơn hàng: {order.OrderId}
-- Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
-- Tổng giá trị: {totalAmount:N0} VNĐ
+                Chi tiết đơn hàng:
+                - Mã đơn hàng: {order.OrderId.ToString()}
+                - Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
 
-Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
+                Các món đã đặt:
+                {itemsList}
+                Tổng phụ: {subtotal:N0} VNĐ
+                Phí vận chuyển: {(totalAmount - subtotal):N0} VNĐ
+                Tổng cộng: {totalAmount:N0} VNĐ
 
-Trân trọng,
-Đội ngũ hỗ trợ khách hàng";
+                Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
+
+                Trân trọng,
+                Đội ngũ hỗ trợ khách hàng";
 
             try
             {

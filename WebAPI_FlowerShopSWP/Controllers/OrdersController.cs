@@ -14,6 +14,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Globalization;
 using WebAPI_FlowerShopSWP.Repository;
 using System.Text.Json;
+using System.Drawing.Drawing2D;
+using Microsoft.Extensions.Hosting;
+using System.ComponentModel.DataAnnotations;
+
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -62,7 +66,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                    o.OrderStatus,
                    o.OrderDate,
                    o.TotalAmount,
-                   o.OrderDelivery, // Thêm dòng này
+                   o.OrderDelivery,
                    OrderItems = o.OrderItems.Select(oi => new
                    {
                        oi.FlowerId,
@@ -86,7 +90,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                })
                .ToListAsync();
 
-                    return Ok(orders);
+            return Ok(orders);
         }
 
         // GET: api/Orders
@@ -156,6 +160,34 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
 
+        [HttpGet("orders/seller/{sellerId}")]
+        public async Task<IActionResult> GetOrdersBySeller(int sellerId)
+        {
+            var orders = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Order.User)
+                .Select(oi => new
+                {
+                    oi.Order.OrderId,
+                    oi.Order.OrderDate,
+                    oi.Order.OrderStatus,
+                    oi.Order.DeliveryAddress,
+                    OrderDelivery = oi.Order.OrderDelivery.HasValue ? oi.Order.OrderDelivery.Value.ToString() : "N/A",
+                    oi.Order.TotalAmount,
+                    BuyerName = oi.Order.User.FullName,
+                    BuyerEmail = oi.Order.User.Email,
+                    BuyerPhone = oi.Order.User.Phone,
+                    ProductName = oi.Flower.FlowerName,
+                    Quantity = oi.Quantity,
+                    ItemTotal = oi.Quantity * oi.Price
+                })
+                .ToListAsync();
+
+            return Ok(orders);
+        }
+
+
         [HttpPost]
         public async Task<ActionResult<Order>> PostOrder(Order order)
         {
@@ -165,7 +197,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return CreatedAtAction("GetOrder", new { id = order.OrderId }, order);
         }
 
-        public class CartItem
+        public class CartItemRequest
         {
             public int FlowerId { get; set; }
             public int Quantity { get; set; }
@@ -284,45 +316,57 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [HttpPost("checkout")]
         [Authorize]
-        public async Task<IActionResult> Checkout([FromBody] List<CartItem> cartItems, [FromQuery] string fullAddress)
+        public async Task<IActionResult> Checkout([FromBody] List<CartItemRequest> cartItems, [FromQuery] string fullAddress, [FromQuery] string wardCode, [FromQuery] string wardName, [FromQuery] int toDistrictId, [FromQuery] string? note)
         {
             if (cartItems == null || !cartItems.Any())
             {
                 return BadRequest("Giỏ hàng trống hoặc không hợp lệ");
             }
 
-            using (var transaction = await _context.Database.BeginTransactionAsync())
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                try
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
                 {
-                    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-                    if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-                    {
-                        return Unauthorized("ID người dùng không hợp lệ");
-                    }
+                    return Unauthorized("ID người dùng không hợp lệ");
+                }
 
-                    var user = await _context.Users.FindAsync(userId);
-                    if (user == null)
-                    {
-                        return NotFound($"Không tìm thấy người dùng với ID {userId}");
-                    }
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                {
+                    return NotFound("Không tìm thấy người dùng");
+                }
 
+                var flowerIds = cartItems.Select(ci => ci.FlowerId).Distinct().ToList();
+                var flowers = await _context.Flowers
+                    .Where(f => flowerIds.Contains(f.FlowerId))
+                    .ToDictionaryAsync(f => f.FlowerId, f => f);
+
+                var itemsBySeller = cartItems
+                    .GroupBy(item => flowers[item.FlowerId].UserId)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                foreach (var (sellerUserId, sellerItems) in itemsBySeller)
+                {
                     var newOrder = new Order
                     {
                         UserId = userId,
                         OrderStatus = "Pending",
-                        OrderDate = DateTime.Now,
-                        //DeliveryAddress = user.Address,
+                        OrderDate = DateTime.UtcNow,
                         DeliveryAddress = string.IsNullOrEmpty(fullAddress) ? user.Address : fullAddress,
                         OrderDelivery = OrderDelivery.ChờXửLý,
+                        WardCode = wardCode,
+                        WardName = wardName,
+                        ToDistrictId = toDistrictId,
+                        Note = string.IsNullOrWhiteSpace(note) ? null : note,
                         OrderItems = new List<OrderItem>()
-                    }; 
+                    };
 
                     decimal totalAmount = 0;
-                    foreach (var cartItem in cartItems)
+                    foreach (var cartItem in sellerItems)
                     {
-                        var flower = await _context.Flowers.FindAsync(cartItem.FlowerId);
-                        if (flower == null)
+                        if (!flowers.TryGetValue(cartItem.FlowerId, out var flower))
                         {
                             return BadRequest($"Không tìm thấy hoa với ID {cartItem.FlowerId}");
                         }
@@ -344,52 +388,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     }
 
                     newOrder.TotalAmount = totalAmount;
-
                     _context.Orders.Add(newOrder);
-                    await _context.SaveChangesAsync();
-
-                    await transaction.CommitAsync();
-
-                    _logger.LogInformation("Order created successfully: OrderId={OrderId}, TotalAmount={TotalAmount}", newOrder.OrderId, totalAmount);
-
-                    return Ok(new { message = "Đặt hàng thành công", orderId = newOrder.OrderId, totalAmount });
                 }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-                    _logger.LogError(ex, "Unexpected error during checkout: {ErrorMessage}", ex.Message);
-                    if (ex.InnerException != null)
-                    {
-                        _logger.LogError("Inner exception: {InnerErrorMessage}", ex.InnerException.Message);
-                    }
-                    return StatusCode(500, $"Đã xảy ra lỗi không mong muốn: {ex.Message}");
-                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { message = "Đặt hàng thành công" });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Unexpected error during checkout: {ErrorMessage}", ex.Message);
+                return StatusCode(500, $"Đã xảy ra lỗi không mong muốn: {ex.Message}");
             }
         }
-
-
-        private async Task SendConfirmationEmail(User user, Order order, decimal totalAmount)
-        {
-            string emailSubject = "Xác nhận đơn hàng";
-            string emailBody = $@"
-    Xin chào {user.Name},
-
-    Đơn hàng của bạn đã được xác nhận thành công.
-
-    Chi tiết đơn hàng:
-    - Mã đơn hàng: {order.OrderId}
-    - Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
-    - Tổng giá trị: {totalAmount:N0} VNĐ
-
-    Cảm ơn bạn đã mua hàng tại cửa hàng chúng tôi!
-
-    Trân trọng,
-    Đội ngũ hỗ trợ khách hàng";
-
-            await _emailSender.SendEmailAsync(user.Email, emailSubject, emailBody);
-            _logger.LogInformation("Confirmation email sent to {UserEmail}", user.Email);
-        }
-
 
 
         // PUT: api/Orders/5
@@ -474,6 +487,303 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             return _context.Orders.Any(e => e.OrderId == id);
         }
-    }
 
+        [HttpGet("details/{orderId}")]
+        [Authorize]
+        public async Task<ActionResult<object>> GetOrderDetails(int orderId)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized("Invalid user ID");
+            }
+
+            var order = await _context.Orders
+                .Where(o => o.OrderId == orderId && o.UserId == userId)
+                .Include(o => o.OrderItems)
+                    .ThenInclude(oi => oi.Flower) // Thêm Include cho Flower
+                .Include(o => o.User)
+                .Select(o => new
+                {
+                    o.OrderId,
+                    o.OrderStatus,
+                    o.OrderDate,
+                    o.TotalAmount,
+                    o.OrderDelivery,
+                    o.DeliveryAddress,
+                    o.WardCode,
+                    o.WardName,
+                    o.ToDistrictId,
+                    o.Note,
+                    FullName = o.User.Name,
+                    Phone = o.User.Phone,
+                    Email = o.User.Email,
+                    Items = o.OrderItems.Select(oi => new
+                    {
+                        oi.FlowerId,
+                        FlowerName = oi.Flower.FlowerName, // Lấy tên hoa từ relationship
+                        oi.Quantity,
+                        oi.Price
+                    }),
+                    TotalWeight = o.OrderItems.Sum(oi => oi.Quantity * 5000)
+                })
+                .FirstOrDefaultAsync();
+
+            if (order == null)
+            {
+                return NotFound("Order not found or you don't have permission to view this order");
+            }
+
+            return Ok(order);
+        }
+
+        [HttpPost("reports")]
+        [Authorize]
+        public async Task<IActionResult> CreateReport([FromBody] CreateReportDto dto)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return Unauthorized("Invalid user ID");
+            }
+
+            var order = await _context.Orders
+                .FirstOrDefaultAsync(o => o.OrderId == dto.OrderId && o.UserId == userId);
+
+            if (order == null)
+            {
+                return NotFound("Order not found or you don't have permission to report this order");
+            }
+
+            var report = new OrderReport
+            {
+                OrderId = dto.OrderId,
+                UserId = userId,
+                Content = dto.Content,
+                CreatedAt = DateTime.UtcNow,
+                Status = "pending"
+            };
+
+            _context.OrderReports.Add(report);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Báo cáo đã được gửi thành công" });
+        }
+
+        // Endpoint để admin lấy danh sách báo cáo
+        [HttpGet("reports")]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<IEnumerable<object>>> GetReports()
+        {
+            var reports = await _context.OrderReports
+                .Include(r => r.Order)
+                .Include(r => r.User)
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => new
+                {
+                    r.ReportId,
+                    r.OrderId,
+                    r.Content,
+                    r.CreatedAt,
+                    r.Status,
+                    UserName = r.User.Name,
+                    OrderDate = r.Order.OrderDate,
+                    OrderStatus = r.Order.OrderStatus
+                })
+                .ToListAsync();
+
+            return Ok(reports);
+        }
+
+        // Endpoint để admin cập nhật trạng thái báo cáo
+        [HttpPut("reports/{reportId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateReportStatus(int reportId, [FromBody] UpdateReportStatusDto dto)
+        {
+            var report = await _context.OrderReports.FindAsync(reportId);
+            if (report == null)
+            {
+                return NotFound("Report not found");
+            }
+
+            report.Status = dto.Status;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Trạng thái báo cáo đã được cập nhật" });
+        }
+
+        public class CreateReportDto
+        {
+            public int OrderId { get; set; }
+            public string Content { get; set; }
+        }
+
+        public class UpdateReportStatusDto
+        {
+            public string Status { get; set; }
+        }
+
+        [HttpPost("create-custom-order")]
+        [Authorize(Roles = "Seller")]
+        public async Task<IActionResult> CreateCustomOrder([FromForm] CreateCustomOrderDto dto)
+        {
+            try
+            {
+                var sellerId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+                if (sellerId != dto.SellerId)
+                {
+                    return Forbid("You are not authorized to create orders for this seller");
+                }
+
+                // Kiểm tra category
+                var category = await _context.Categories.FindAsync(dto.CategoryId);
+                if (category == null)
+                {
+                    return BadRequest(new { success = false, message = "Danh mục không tồn tại" });
+                }
+
+                // Xử lý ảnh
+                string imageUrl = null;
+                if (dto.Image != null)
+                {
+                    var fileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.Image.FileName);
+                    var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "flowers");
+
+                    if (!Directory.Exists(uploadsFolder))
+                    {
+                        Directory.CreateDirectory(uploadsFolder);
+                    }
+
+                    var filePath = Path.Combine(uploadsFolder, fileName);
+                    using (var stream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await dto.Image.CopyToAsync(stream);
+                    }
+                    imageUrl = $"/uploads/flowers/{fileName}";
+                }
+
+                // Tạo flower với IsCustomOrder và IsHidden
+                var flower = new Flower
+                {
+                    FlowerName = dto.FlowerName,
+                    Price = dto.Price,
+                    ImageUrl = imageUrl,
+                    UserId = sellerId,
+                    Quantity = dto.Quantity,
+                    ListingDate = DateTime.UtcNow,
+                    Status = "Available",
+                    Condition = dto.Condition,
+                    CategoryId = dto.CategoryId,
+                    IsCustomOrder = true,
+                    IsVisible = true
+                };
+
+                _context.Flowers.Add(flower);
+                await _context.SaveChangesAsync();
+
+                // Thêm vào giỏ hàng người mua
+                var cart = await GetOrCreateCart(dto.BuyerId);
+                var cartItem = new CartItem
+                {
+                    CartId = cart.CartId,
+                    FlowerId = flower.FlowerId,
+                    Quantity = dto.Quantity,
+                    Price = dto.Price,
+                    IsCustomOrder = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                _context.CartItems.Add(cartItem);
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Đã tạo sản phẩm tùy chỉnh và thêm vào giỏ hàng",
+                    data = new { flowerId = flower.FlowerId }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating custom order");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi tạo sản phẩm tùy chỉnh",
+                    error = ex.Message
+                });
+            }
+        }
+
+        private async Task<Cart> GetOrCreateCart(int userId)
+        {
+            var cart = await _context.Carts
+                .FirstOrDefaultAsync(c => c.UserId == userId && c.Status == "Active");
+
+            if (cart == null)
+            {
+                cart = new Cart
+                {
+                    UserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    Status = "Active"
+                };
+                _context.Carts.Add(cart);
+                await _context.SaveChangesAsync();
+            }
+
+            return cart;
+        }
+        private async Task<int> GetOrCreateCartId(int userId)
+        {
+            var cart = await _context.Carts
+                .FirstOrDefaultAsync(c => c.UserId == userId && c.Status == "Active");
+
+            if (cart == null)
+            {
+                cart = new Cart
+                {
+                    UserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    Status = "Active"
+                };
+                _context.Carts.Add(cart);
+                await _context.SaveChangesAsync();
+            }
+
+            return cart.CartId;
+        }
+        public class CreateCustomOrderDto
+        {
+            [Required]
+            public int BuyerId { get; set; }
+
+            [Required]
+            public int SellerId { get; set; }
+
+            [Required]
+            [StringLength(100)]
+            public string FlowerName { get; set; }
+
+            [Required]
+            [Range(0, double.MaxValue)]
+            public decimal Price { get; set; }
+
+            [Required]
+            [Range(1, int.MaxValue)]
+            public int Quantity { get; set; }
+
+            [Required]
+            public string Condition { get; set; }
+
+            [Required]
+            public int CategoryId { get; set; }
+
+            public IFormFile Image { get; set; }
+        }
+    }
 }

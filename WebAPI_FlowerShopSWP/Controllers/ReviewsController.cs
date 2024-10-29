@@ -114,7 +114,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             var reviews = await _context.Reviews
                 .Include(r => r.User)
                 .Include(r => r.Flower)
-                .ThenInclude(f => f.Seller) // Include the seller (User) of the flower
+                .ThenInclude(f => f.Seller)
                 .Select(r => new
                 {
                     r.ReviewId,
@@ -153,9 +153,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             Console.WriteLine($"Backend stats: Average Rating = {stats.AverageRating}, Total Reviews = {stats.TotalReviews}");
             return Ok(stats);
         }
-
-
-
 
         [HttpGet("flower/{flowerId}")]
         public async Task<ActionResult<object>> GetReviewsByFlowerId(int flowerId)

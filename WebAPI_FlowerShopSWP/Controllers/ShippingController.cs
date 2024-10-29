@@ -40,23 +40,48 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest("Shop chỉ hỗ trợ giao hàng trong các quận thuộc Hồ Chí Minh.");
             }
 
-            string cacheKey = $"shipping_fee_{request.to_district_id}_{request.to_ward_code}_{request.weight}";
+            if (request.from_district_id != 1442)
+            {
+                return BadRequest("Địa chỉ gửi hàng không hợp lệ.");
+            }
+
+            if (string.IsNullOrEmpty(request.to_ward_code))
+            {
+                return BadRequest("Mã phường/xã không được để trống.");
+            }
+
+            // Lấy danh sách dịch vụ có sẵn
+            var availableServices = await GetAvailableServices(request.from_district_id, request.to_district_id);
+            if (availableServices == null || !availableServices.Any())
+            {
+                return BadRequest("Không có dịch vụ vận chuyển phù hợp.");
+            }
+
+            // Chọn dịch vụ phù hợp (ví dụ: dịch vụ đầu tiên trong danh sách)
+            var selectedService = availableServices.First();
+
+            string cacheKey = $"shipping_fee_{request.to_district_id}_{request.to_ward_code}_{request.weight}_{selectedService.service_id}";
 
             if (_cache.TryGetValue(cacheKey, out string cachedResponse))
             {
                 return Ok(cachedResponse);
             }
 
-            request.service_type_id = 2;
+            // Sử dụng service_id từ dịch vụ đã chọn
+            request.service_id = selectedService.service_id;
+            request.service_type_id = selectedService.service_type_id;
 
             var client = _httpClientFactory.CreateClient("GHNClient");
 
             var content = new StringContent(JsonConvert.SerializeObject(request), Encoding.UTF8, "application/json");
+            _logger.LogInformation($"Sending request to GHN API: {JsonConvert.SerializeObject(request)}");
+
             var response = await client.PostAsync("v2/shipping-order/fee", content);
 
             if (response.IsSuccessStatusCode)
             {
                 var data = await response.Content.ReadAsStringAsync();
+                _logger.LogInformation($"Successful response from GHN API: {data}");
 
                 var cacheEntryOptions = new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(30));
@@ -67,7 +92,34 @@ namespace WebAPI_FlowerShopSWP.Controllers
             }
 
             var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError($"Error response from GHN API: {errorContent}");
             return BadRequest($"Unable to calculate shipping fee. Error: {errorContent}");
+        }
+
+        private async Task<List<ServiceInfo>> GetAvailableServices(int fromDistrict, int toDistrict)
+        {
+            var client = _httpClientFactory.CreateClient("GHNClient");
+
+            var requestBody = new
+            {
+                shop_id = 194721,
+                from_district = fromDistrict,
+                to_district = toDistrict
+            };
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("v2/shipping-order/available-services", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<ServiceResponse>(data);
+                return result.Data;
+            }
+
+            _logger.LogError($"Error fetching available services: {await response.Content.ReadAsStringAsync()}");
+            return null;
         }
 
         [HttpPost("create-order")]
@@ -87,10 +139,18 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return BadRequest($"Invalid ward information. Please check ward code and name.");
             }
 
+            var availableServices = await GetAvailableServices(1442, request.to_district_id);
+            if (availableServices == null || !availableServices.Any())
+            {
+                return BadRequest("Không có dịch vụ vận chuyển phù hợp.");
+            }
+
+            var selectedService = availableServices.First();
+
             var createOrderDto = new CreateOrderDto
             {
                 payment_type_id = 1,
-                note = "Đơn hàng hoa",
+                note = request.note,
                 from_name = request.from_name,
                 from_phone = request.from_phone,
                 from_address = request.from_address,
@@ -104,19 +164,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 to_ward_code = request.to_ward_code,
                 to_ward_name = request.to_ward_name,
                 to_district_id = request.to_district_id,
+                client_order_code = request.client_order_code,
                 content = "Hoa",
                 weight = request.weight,
                 length = request.length,
                 width = request.width,
                 height = request.height,
-                //insurance_value = request.items.Sum(item => item.price * item.quantity),
-                service_type_id = 2,
+                service_id = selectedService.service_id,
+                service_type_id = selectedService.service_type_id,
                 items = request.items.Select(item => new CreateOrderItemDto
                 {
                     name = item.name,
-                    quantity = item.quantity,
                     code = item.code,
+                    quantity = item.quantity,
                     price = item.price,
+                    weight = 5000,
                 }).ToList()
             };
 
@@ -206,6 +268,39 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             var errorContent = await response.Content.ReadAsStringAsync();
             return BadRequest($"Unable to fetch wards. Error: {errorContent}");
+        }
+
+        [HttpGet("services")]
+        public async Task<IActionResult> GetServices([FromQuery] ServiceRequest request)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var client = _httpClientFactory.CreateClient("GHNClient");
+
+            var requestBody = new
+            {
+                shop_id = 194721,
+                from_district = request.FromDistrict,
+                to_district = request.ToDistrict
+            };
+
+            var content = new StringContent(JsonConvert.SerializeObject(requestBody), Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("v2/shipping-order/available-services", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadAsStringAsync();
+                _logger.LogInformation($"Successful response from GHN API for services: {data}");
+                return Ok(data);
+            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError($"Error response from GHN API for services: {errorContent}");
+            return BadRequest($"Unable to fetch available services. Error: {errorContent}");
         }
     }
 }

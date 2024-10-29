@@ -1,10 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using WebAPI_FlowerShopSWP.Models;
+using WebAPI_FlowerShopSWP.DTO;
+using WebAPI_FlowerShopSWP.Services;
+using System.Security.Claims;
 
 namespace WebAPI_FlowerShopSWP.Controllers
 {
@@ -13,104 +11,129 @@ namespace WebAPI_FlowerShopSWP.Controllers
     [ApiController]
     public class NotificationController : ControllerBase
     {
-        private readonly FlowerEventShopsContext _context;
+        private readonly INotificationService _notificationService;
         private readonly ILogger<NotificationController> _logger;
 
-        public NotificationController([FromServices] FlowerEventShopsContext context, ILogger<NotificationController> logger)
+        public NotificationController(
+            INotificationService notificationService,
+            ILogger<NotificationController> logger)
         {
-            _context = context;
+            _notificationService = notificationService;
             _logger = logger;
         }
 
         [HttpGet]
-        [AllowAnonymous] // Allow this action to be accessed without authentication
-        public async Task<IActionResult> GetNotifications([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        public async Task<ActionResult<List<NotificationDTO>>> GetMyNotifications(
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 10)
         {
             try
             {
-                var notifications = await _context.Notifications
-                    .Include(n => n.Seller)
-                    .Where(n => n.Seller != null && n.Seller.UserType == "Seller")
-                    .OrderByDescending(n => n.NotificationDate)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .Select(n => new
-                    {
-                        n.NotificationId,
-                        n.Message,
-                        n.NotificationDate,
-                        n.IsRead,
-                        SellerName = n.Seller.FullName ?? "Unknown"
-                    })
-                    .ToListAsync();
-
-                var totalCount = await _context.Notifications.CountAsync(n => n.Seller != null && n.Seller.UserType == "Seller");
-
-                return Ok(new
+                var userId = GetCurrentUserId();
+                if (!userId.HasValue)
                 {
-                    Notifications = notifications,
-                    TotalCount = totalCount,
-                    CurrentPage = page,
-                    PageSize = pageSize
-                });
+                    return Unauthorized();
+                }
+
+                var notifications = await _notificationService.GetUserNotifications(userId.Value, page, pageSize);
+                return Ok(notifications);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while fetching notifications");
+                _logger.LogError(ex, "Error getting notifications");
                 return StatusCode(500, "An error occurred while fetching notifications");
             }
         }
 
         [HttpPost]
-        public async Task<IActionResult> CreateNotification([FromBody] Notification notification)
+        public async Task<ActionResult<NotificationDTO>> CreateNotification(
+            [FromBody] CreateNotificationDTO createDto)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            notification.NotificationDate = DateTime.Now;
-            notification.IsRead = false;
-
-            if (notification.SellerId == 0)
-            {
-                var userIdClaim = User.FindFirst("UserId");
-                if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int userId))
-                {
-                    notification.SellerId = userId;
-                }
-                else
-                {
-                    return BadRequest("SellerId is required");
-                }
-            }
-
             try
             {
-                _context.Notifications.Add(notification);
-                await _context.SaveChangesAsync();
-                return CreatedAtAction(nameof(GetNotifications), new { id = notification.NotificationId }, notification);
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                var notification = await _notificationService.CreateNotification(createDto);
+                return CreatedAtAction(
+                    nameof(GetMyNotifications),
+                    new { id = notification.NotificationId },
+                    notification);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while creating the notification");
+                _logger.LogError(ex, "Error creating notification");
                 return StatusCode(500, "An error occurred while creating the notification");
             }
         }
 
-        [HttpPut("{id}")]
+        [HttpPost("{id}/mark-read")]
         public async Task<IActionResult> MarkAsRead(int id)
         {
-            var notification = await _context.Notifications.FindAsync(id);
-            if (notification == null)
+            try
             {
-                return NotFound();
+                await _notificationService.MarkAsRead(id);
+                return NoContent();
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking notification as read");
+                return StatusCode(500, "An error occurred while marking the notification as read");
+            }
+        }
 
-            notification.IsRead = true;
-            await _context.SaveChangesAsync();
+        [HttpPost("mark-all-read")]
+        public async Task<IActionResult> MarkAllAsRead()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized();
+                }
 
-            return NoContent();
+                await _notificationService.MarkAllAsRead(userId.Value);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking all notifications as read");
+                return StatusCode(500, "An error occurred while marking all notifications as read");
+            }
+        }
+
+        [HttpGet("unread-count")]
+        public async Task<ActionResult<int>> GetUnreadCount()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized();
+                }
+
+                var count = await _notificationService.GetUnreadCount(userId.Value);
+                return Ok(count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting unread count");
+                return StatusCode(500, "An error occurred while getting unread count");
+            }
+        }
+
+        private int? GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int userId))
+            {
+                return userId;
+            }
+            return null;
         }
     }
 }

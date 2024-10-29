@@ -1,19 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace WebAPI_FlowerShopSWP.Models;
+    namespace WebAPI_FlowerShopSWP.Models
+    {
+        public class Notification
+        {
+            [Key]
+            public int NotificationId { get; set; }
 
-public class Notification
-{
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public int NotificationId { get; set; }
-    public string Message { get; set; }
-    public DateTime NotificationDate { get; set; }
-    public bool IsRead { get; set; } = false;
-    public int SellerId { get; set; }
+            [Required]
+            public int UserId { get; set; }
 
-    public virtual User? Seller { get; set; } = null!;
+            [Required]
+            [StringLength(255)]
+            public string Title { get; set; }
+
+            [Required]
+            [StringLength(1000)]
+            public string Content { get; set; }
+
+            [Required]
+            [StringLength(50)]
+            public string Type { get; set; }
+
+            public bool IsRead { get; set; } = false;
+
+            public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+            public int? RelatedId { get; set; }
+
+            [StringLength(50)]
+            public string RelatedType { get; set; }
+
+            public bool IsActive { get; set; } = true;
+
+            // Navigation property
+            [ForeignKey("UserId")]
+            public virtual User User { get; set; }
+        }
 }

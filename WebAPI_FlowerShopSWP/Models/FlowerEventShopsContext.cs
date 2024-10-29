@@ -1,6 +1,6 @@
-﻿    using System;
-    using System.Collections.Generic;
-    using Microsoft.EntityFrameworkCore;
+﻿using System;
+using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
 using WebAPI_FlowerShopSWP.Controllers;
 
     namespace WebAPI_FlowerShopSWP.Models;
@@ -15,7 +15,6 @@ using WebAPI_FlowerShopSWP.Controllers;
             : base(options)
         {
         }
-
         public virtual DbSet<Category> Categories { get; set; }
 
         public virtual DbSet<Conversation> Conversations { get; set; }
@@ -38,8 +37,13 @@ using WebAPI_FlowerShopSWP.Controllers;
         public virtual DbSet<User> Users { get; set; }
 
         public DbSet<SellerRegistrationRequest> SellerRegistrationRequests { get; set; }
-
+        public DbSet<Cart> Carts { get; set; }
+        public DbSet<CartItem> CartItems { get; set; }
     public virtual DbSet<SellerFollow> SellerFollows { get; set; }
+
+        public virtual DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
+
+        public virtual DbSet<OrderReport> OrderReports { get; set; }
 
 
 
@@ -67,19 +71,137 @@ using WebAPI_FlowerShopSWP.Controllers;
                 entity.Property(e => e.Description)
                     .HasMaxLength(255)
                     .HasColumnName("description");
+
+            });
+
+            modelBuilder.Entity<Cart>(entity =>
+            {
+                entity.HasKey(e => e.CartId);
+
+                entity.Property(e => e.CartId)
+                    .HasColumnName("cartId");
+
+                entity.Property(e => e.UserId)
+                    .HasColumnName("userId");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("(getdate())")
+                    .HasColumnName("createdAt");
+
+                entity.Property(e => e.UpdatedAt)
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("(getdate())")
+                    .HasColumnName("updatedAt");
+
+                entity.Property(e => e.Status)
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Active")
+                    .HasColumnName("status");
+
+                // Relationship
+                entity.HasOne(c => c.User)
+                    .WithMany()
+                    .HasForeignKey(c => c.UserId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("FK_Carts_Users");
+            });
+
+
+        modelBuilder.Entity<CartItem>(entity =>
+            {
+                entity.HasKey(e => e.CartItemId);
+
+                entity.Property(e => e.CartItemId)
+                    .HasColumnName("cartItemId");
+
+                entity.Property(e => e.CartId)
+                    .HasColumnName("cartId");
+
+                entity.Property(e => e.FlowerId)
+                    .HasColumnName("flowerId");
+
+                entity.Property(e => e.Quantity)
+                    .HasColumnName("quantity");
+
+                entity.Property(e => e.Price)
+                    .HasColumnType("decimal(10, 2)")
+                    .HasColumnName("price");
+
+                entity.Property(e => e.IsCustomOrder)
+                    .HasDefaultValue(false)
+                    .HasColumnName("isCustomOrder");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("(getdate())")
+                    .HasColumnName("createdAt");
+
+                entity.Property(e => e.UpdatedAt)
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("(getdate())")
+                    .HasColumnName("updatedAt");
+
+                // Relationships
+                entity.HasOne(ci => ci.Cart)
+                    .WithMany(c => c.CartItems)
+                    .HasForeignKey(ci => ci.CartId)
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("FK_CartItems_Carts");
+
+                entity.HasOne(ci => ci.Flower)
+                    .WithMany()
+                    .HasForeignKey(ci => ci.FlowerId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("FK_CartItems_Flowers");
             });
 
         modelBuilder.Entity<Conversation>(entity =>
         {
             entity.HasKey(e => e.ConversationId);
-            entity.Property(e => e.UpdatedAt).HasColumnType("datetime");
 
-            entity.HasOne(d => d.User)
-                .WithMany(p => p.Conversations)
-                .HasForeignKey(d => d.UserId)
+            entity.Property(e => e.ConversationId)
+                .HasColumnName("conversationId");
+
+            entity.Property(e => e.SellerId)
+                .HasColumnName("sellerId");
+
+            entity.Property(e => e.BuyerId)
+                .HasColumnName("buyerId");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("updatedAt")
+                .HasDefaultValueSql("(getdate())");
+
+            entity.Property(e => e.LastMessageId)
+                .HasColumnName("lastMessageId");
+
+            entity.Property(e => e.IsActive)
+                .HasColumnName("isActive")
+                .HasDefaultValue(true);
+
+            // Navigation properties
+            entity.HasOne(d => d.Seller)
+                .WithMany(p => p.SellerConversations)
+                .HasForeignKey(d => d.SellerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Conversations_Users");
+                .HasConstraintName("FK_Conversations_Seller");
+
+            entity.HasOne(d => d.Buyer)
+                .WithMany(p => p.BuyerConversations)
+                .HasForeignKey(d => d.BuyerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Conversations_Buyer");
+
+            entity.HasOne(d => d.LastMessage)
+                .WithMany()
+                .HasForeignKey(d => d.LastMessageId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Conversations_LastMessage");
         });
+
+
 
         modelBuilder.Entity<Delivery>(entity =>
             {
@@ -149,94 +271,142 @@ using WebAPI_FlowerShopSWP.Controllers;
                     .HasConstraintName("FK__Flowers__sellerI__5070F446");
             });
 
-            modelBuilder.Entity<Message>(entity =>
-            {
-                entity.HasKey(e => e.MessageId).HasName("PK__Messages__4808B99381C2D9AD");
+        modelBuilder.Entity<Message>(entity =>
+        {
+            entity.HasKey(e => e.MessageId);
 
-                entity.Property(e => e.MessageId).HasColumnName("messageId");
-                entity.Property(e => e.ConversationId).HasColumnName("conversationId");
-                entity.Property(e => e.UserId).HasColumnName("userId");
-                entity.Property(e => e.MessageContent).HasColumnName("messageContent");
-                entity.Property(e => e.SendTime)
-                    .HasDefaultValueSql("(getdate())")
-                    .HasColumnType("datetime")
-                    .HasColumnName("sendTime");
-                entity.Property(e => e.IsRead)
-                    .HasDefaultValue(false)
-                    .HasColumnName("isRead");
+            entity.Property(e => e.MessageId)
+                .HasColumnName("messageId");
 
-                entity.HasOne(d => d.Conversation).WithMany(p => p.Messages)
-                    .HasForeignKey(d => d.ConversationId)
-                    .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK__Messages__ConversationId");
+            entity.Property(e => e.ConversationId)
+                .HasColumnName("conversationId");
 
-                entity.HasOne(d => d.User).WithMany(p => p.Messages)
-                    .HasForeignKey(d => d.UserId)
-                    .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK__Messages__UserId");
-            });
+            entity.Property(e => e.SenderId)
+                .HasColumnName("senderId");
 
-            modelBuilder.Entity<Notification>(entity =>
-            {
-                entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__4BA5CEA96D4DD061");
+            entity.Property(e => e.MessageContent)
+                .HasColumnName("messageContent");
 
-                entity.Property(e => e.NotificationId)
-                    .HasColumnName("notificationId")
-                    .UseIdentityColumn();
+            entity.Property(e => e.ImageUrl)
+            .HasMaxLength(1000)
+            .IsUnicode(false);
 
-                entity.Property(e => e.IsRead)
-                    .HasDefaultValue(false)
-                    .HasColumnName("isRead");
-                entity.Property(e => e.Message)
-                    .HasMaxLength(255)
-                    .HasColumnName("message");
-                entity.Property(e => e.NotificationDate)
-                    .HasDefaultValueSql("(getdate())")
-                    .HasColumnType("datetime")
-                    .HasColumnName("notificationDate");
-                entity.Property(e => e.SellerId)
-                    .HasColumnName("sellerId");
-                entity.HasOne(d => d.Seller)
-                    .WithMany(p => p.Notifications)
-                    .HasForeignKey(d => d.SellerId)
-                    .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK_Notifications_Users");
-            });
+            entity.Property(e => e.SendTime)
+                .HasColumnType("datetime")
+                .HasColumnName("sendTime")
+                .HasDefaultValueSql("(getdate())");
 
-            modelBuilder.Entity<Order>(entity =>
-            {
-                entity.HasKey(e => e.OrderId).HasName("PK__Orders__0809335D68AED2CC");
+            entity.Property(e => e.IsRead)
+                .HasColumnName("isRead")
+                .HasDefaultValue(false);
 
-                entity.Property(e => e.OrderId).HasColumnName("orderId");
-                entity.Property(e => e.UserId).HasColumnName("userId");
-                entity.Property(e => e.DeliveryAddress)
-                    .HasMaxLength(255)
-                    .HasColumnName("deliveryAddress");
-                entity.Property(e => e.OrderDate)
-                    .HasDefaultValueSql("(getdate())")
-                    .HasColumnType("datetime")
-                    .HasColumnName("orderDate");
-                entity.Property(e => e.OrderStatus)
-                    .HasMaxLength(20)
-                    .HasColumnName("orderStatus");
+            entity.Property(e => e.IsDeleted)
+                .HasColumnName("isDeleted")
+                .HasDefaultValue(false);
 
-                entity.Property(e => e.OrderDelivery)
-                    .HasConversion<string>()
-                    .HasMaxLength(50)
-                    .HasColumnName("orderDelivery");
+            entity.Property(e => e.DeletedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("deletedAt")
+                .IsRequired(false);
 
-                entity.Property(e => e.TotalAmount)
-                    .HasColumnType("decimal(18, 2)")
-                    .HasColumnName("totalAmount")
-                    .HasDefaultValue(0.00m);
+            // Navigation properties
+            entity.HasOne(d => d.Conversation)
+                .WithMany(p => p.Messages)
+                .HasForeignKey(d => d.ConversationId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Messages_Conversations");
 
-                entity.HasOne(d => d.User).WithMany(p => p.Orders)
-                    .HasForeignKey(d => d.UserId)
-                    .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK__Orders__userId__5629CD9C");
-            });
+            entity.HasOne(d => d.Sender)
+                .WithMany(p => p.Messages)
+                .HasForeignKey(d => d.SenderId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Messages_Users");
+        });
 
-            modelBuilder.Entity<OrderItem>(entity =>
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.NotificationId).HasName("PK__Notifications__NotificationId");
+
+            entity.Property(e => e.NotificationId)
+                .HasColumnName("notificationId")
+                .UseIdentityColumn();
+
+            entity.Property(e => e.UserId)
+                .HasColumnName("userId");
+
+            entity.Property(e => e.Title)
+                .HasMaxLength(255)
+                .HasColumnName("title");
+
+            entity.Property(e => e.Content)
+                .HasMaxLength(1000)
+                .HasColumnName("content");
+
+            entity.Property(e => e.Type)
+                .HasMaxLength(50)
+                .HasColumnName("type");
+
+            entity.Property(e => e.IsRead)
+                .HasDefaultValue(false)
+                .HasColumnName("isRead");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("createdAt");
+
+            entity.Property(e => e.RelatedId)
+                .HasColumnName("relatedId");
+
+            entity.Property(e => e.RelatedType)
+                .HasMaxLength(50)
+                .HasColumnName("relatedType");
+
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("isActive");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Notifications)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Notifications_Users");
+        });
+
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.HasKey(e => e.OrderId).HasName("PK__Orders__0809335D68AED2CC");
+
+            entity.Property(e => e.OrderId).HasColumnName("orderId");
+            entity.Property(e => e.UserId).HasColumnName("userId");
+            entity.Property(e => e.DeliveryAddress)
+                .HasMaxLength(255)
+                .HasColumnName("deliveryAddress");
+            entity.Property(e => e.OrderDate)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("orderDate");
+            entity.Property(e => e.OrderStatus)
+                .HasMaxLength(20)
+                .HasColumnName("orderStatus");
+
+            entity.Property(e => e.OrderDelivery)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasColumnName("orderDelivery");
+            entity.Property(e => e.ToDistrictId).HasColumnName("toDistrictId");
+            entity.Property(e => e.TotalAmount)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("totalAmount")
+                .HasDefaultValue(0.00m);
+
+            entity.HasOne(d => d.User).WithMany(p => p.Orders)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK__Orders__userId__5629CD9C");
+        });
+
+        modelBuilder.Entity<OrderItem>(entity =>
             {
                 entity.HasKey(e => e.OrderItemId).HasName("PK__Order_It__3724BD5298E0FED9");
 
@@ -263,7 +433,22 @@ using WebAPI_FlowerShopSWP.Controllers;
                     .HasConstraintName("FK__Order_Ite__order__5AEE82B9");
             });
 
-            modelBuilder.Entity<Payment>(entity =>
+        modelBuilder.Entity<OrderReport>(entity =>
+        {
+            entity.HasKey(e => e.ReportId);
+
+            entity.HasOne(e => e.Order)
+                .WithMany()
+                .HasForeignKey(e => e.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Payment>(entity =>
             {
                 entity.HasKey(e => e.PaymentId).HasName("PK__Payments__A0D9EFC69AF0913E");
 
@@ -398,7 +583,25 @@ using WebAPI_FlowerShopSWP.Controllers;
               .HasColumnName("profileImageUrl");
     });
 
-      
+        modelBuilder.Entity<WithdrawalRequest>()
+        .HasKey(w => w.RequestId); // Đảm bảo rằng RequestId được chỉ định là khóa chính
+
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.HasKey(e => e.CategoryId).HasName("PK__Categori__23CAF1D89BCF6E4B");
+
+            entity.Property(e => e.CategoryId).HasColumnName("categoryId");
+            entity.Property(e => e.CategoryName)
+                .HasMaxLength(100)
+                .HasColumnName("categoryName");
+            entity.Property(e => e.Description)
+                .HasMaxLength(255)
+                .HasColumnName("description");
+        });
+
+
         OnModelCreatingPartial(modelBuilder);
     }
 
