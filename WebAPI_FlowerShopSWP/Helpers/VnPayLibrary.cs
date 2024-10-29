@@ -85,7 +85,7 @@ namespace WebAPI_FlowerShopSWP.Helpers
             return myChecksum.Equals(inputHash, StringComparison.InvariantCultureIgnoreCase);
         }
 
-         static string HmacSHA512(string key, string inputData)
+        static string HmacSHA512(string key, string inputData)
         {
             var keyBytes = Encoding.UTF8.GetBytes(key);
             using (var hmac = new HMACSHA512(keyBytes))

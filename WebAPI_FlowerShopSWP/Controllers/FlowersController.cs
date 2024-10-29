@@ -32,6 +32,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         {
             var flowers = await _context.Flowers
                 .Include(f => f.Seller)
+                .Where(f => f.IsVisible == true && f.IsCustomOrder == false)
                 .Select(f => new
                 {
                     f.FlowerId,
@@ -43,9 +44,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     f.Status,
                     f.ListingDate,
                     f.ImageUrl,
-
-                    SellerName = f.Seller.Name 
-
+                    SellerName = f.Seller.Name,
+                    f.IsCustomOrder,
+                    f.IsVisible
                 })
                 .ToListAsync();
 
@@ -103,8 +104,9 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return flower;
         }
+
+        // PUT: api/Flowers/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutFlower(int id, [FromForm] string FlowerName, [FromForm] decimal Price, [FromForm] int Quantity, [FromForm] string Status, [FromForm] string Category, [FromForm] IFormFile? image)
         public async Task<IActionResult> PutFlower(int id, [FromForm] string FlowerName, [FromForm] decimal Price, [FromForm] int Quantity, [FromForm] string Status, [FromForm] string Category, [FromForm] IFormFile? image)
         {
             var flower = await _context.Flowers.FindAsync(id);
@@ -147,37 +149,17 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 }
             }
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!FlowerExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
             return NoContent();
         }
 
-
-
-
         [Authorize]
-
         [HttpPost]
         public async Task<ActionResult<Flower>> PostFlower(
-         [FromForm] string FlowerName,
-         [FromForm] decimal Price,
-         [FromForm] int Quantity,
-         [FromForm] int CategoryId,
-         [FromForm] IFormFile? image)
+ [FromForm] string FlowerName,
+ [FromForm] decimal Price,
+ [FromForm] int Quantity,
+ [FromForm] int CategoryId,
+ [FromForm] IFormFile? image)
         {
             try
             {
@@ -323,7 +305,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(hasPurchased);
         }
         // GET: api/Flowers?sellerId={userId}
-        [Authorize]
+        //[Authorize]
         [HttpGet("seller/{userId}")]
         public async Task<ActionResult<IEnumerable<object>>> GetFlowersBySeller(int userId)
         {
@@ -376,16 +358,70 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public IActionResult GetCategories()
         {
 
-            
             var categories = _context.Categories
-                .Select(c => new { c.CategoryName }) 
+                .Select(c => new { c.CategoryName })
                 .ToList();
 
-            return Ok(categories); 
-
+            return Ok(categories);
         }
 
+        [Authorize]
+        [HttpPost("custom-order")]
+        public async Task<ActionResult<Flower>> CreateCustomOrder([FromBody] CustomOrderDto dto)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
 
+                var flower = new Flower
+                {
+                    FlowerName = dto.FlowerName,
+                    Price = dto.Price,
+                    ImageUrl = dto.ImageUrl,
+                    Quantity = 1,
+                    CategoryId = dto.CategoryId,
+                    UserId = userId,
+                    IsVisible = false,
+                    IsCustomOrder = true,
+                    Status = "Custom Order",
+                    Condition = "New",
+                    ListingDate = DateTime.UtcNow
+                };
 
+                _context.Flowers.Add(flower);
+                await _context.SaveChangesAsync();
+
+                // Tự động thêm vào giỏ hàng
+                var cartItem = new CartItem
+                {
+                    CartId = dto.CartId,
+                    FlowerId = flower.FlowerId,
+                    Quantity = 1,
+                    Price = flower.Price,
+                    IsCustomOrder = true
+                };
+
+                _context.CartItems.Add(cartItem);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"Created custom order: {JsonSerializer.Serialize(flower)}");
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Đã tạo đơn hàng tùy chỉnh thành công",
+                    data = flower
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error in CreateCustomOrder: {ex}");
+                return BadRequest(new
+                {
+                    success = false,
+                    message = $"Lỗi khi tạo đơn hàng: {ex.Message}"
+                });
+            }
+        }
     }
 }

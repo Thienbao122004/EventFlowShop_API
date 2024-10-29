@@ -2,13 +2,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using WebAPI_FlowerShopSWP.Models;
 
 namespace WebAPI_FlowerShopSWP.Controllers
-
 {
-    
     [Authorize(Roles = "Admin")]
     [Route("api/[controller]")]
     [ApiController]
@@ -16,9 +15,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
     {
         private readonly FlowerEventShopsContext _context;
         private readonly ILogger<AdminController> _logger;
-        private readonly ILogger<AdminController> _logger;
 
-        public AdminController(FlowerEventShopsContext context, ILogger<AdminController> logger)
         public AdminController(FlowerEventShopsContext context, ILogger<AdminController> logger)
         {
             _context = context;
@@ -208,35 +205,44 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return StatusCode(500, $"An error occurred while updating the order: {ex.Message}");
             }
         }
-        // Get all orders
+        // GET: api/admin/orders
         [HttpGet("orders")]
         public async Task<ActionResult<IEnumerable<object>>> GetAllOrders()
         {
-            var orders = await _context.Orders
-                .Include(o => o.OrderItems)
-                .ThenInclude(oi => oi.Flower)
-                .Include(o => o.User)
-                .ToListAsync();
-
-            var result = orders.Select(order => new
+            try
             {
-                order.OrderId,
-                order.OrderDate,
-                order.OrderStatus,
-                order.DeliveryAddress,
-                OrderDelivery = order.OrderDelivery.HasValue ? order.OrderDelivery.Value.ToString() : "N/A",
-                UserName = order.User.Name,
-                OrderItems = order.OrderItems.Select(oi => new
-                {
-                    oi.OrderItemId,
-                    oi.FlowerId,
-                    oi.Quantity,
-                    oi.Price,
-                    FlowerName = oi.Flower.FlowerName
-                }).ToList()
-            });
+                var orders = await _context.Orders
+                    .Include(o => o.OrderItems)
+                    .Include(o => o.User)
+                    .Select(order => new
+                    {
+                        orderId = order.OrderId,
+                        userId = order.UserId,
+                        orderDate = order.OrderDate,
+                        orderStatus = order.OrderStatus == null ? "Pending" : order.OrderStatus,
+                        deliveryAddress = order.DeliveryAddress == null ? "" : order.DeliveryAddress,
+                        totalAmount = order.TotalAmount == null ? 0m : order.TotalAmount,
+                        orderDelivery = order.OrderDelivery == null ? "ChờXửLý" : order.OrderDelivery.ToString(),
+                        wardCode = order.WardCode == null ? "" : order.WardCode,
+                        wardName = order.WardName == null ? "" : order.WardName,
+                        toDistrictId = order.ToDistrictId,
+                        note = order.Note == null ? "" : order.Note,
+                        userName = order.User != null ? order.User.Name : "Unknown",
+                        orderItems = order.OrderItems.Select(oi => new
+                        {
+                            orderItemId = oi.OrderItemId,
+                            quantity = oi.Quantity,
+                            price = oi.Price == null ? 0m : oi.Price
+                        }).ToList()
+                    })
+                    .ToListAsync();
 
-            return Ok(result);
+                return Ok(orders);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
         }
 
         // Update user role
@@ -331,7 +337,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         // Update order status
         [HttpPut("orders/{id}/status")]
-        public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] string newStatus)
+        public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] OrderStatusUpdateModel model)
         {
             var order = await _context.Orders.FindAsync(id);
             if (order == null)
@@ -339,54 +345,23 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            order.OrderStatus = newStatus;
+            order.OrderStatus = model.OrderStatus;
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        public class OrderStatusUpdateModel
+        {
+            public string OrderStatus { get; set; }
         }
 
         // Delete order
         [HttpDelete("orders/{id}")]
         public async Task<IActionResult> DeleteOrder(int id)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                var order = await _context.Orders
-                    .Include(o => o.OrderItems) 
-                    .Include(o => o.Payments) 
-                    .FirstOrDefaultAsync(o => o.OrderId == id);
-
-                if (order == null)
-                {
-                    return NotFound();
-                }
-
-                _context.OrderItems.RemoveRange(order.OrderItems);
-
-                _context.Payments.RemoveRange(order.Payments);
-
-                _context.Orders.Remove(order);
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-                return NoContent();
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                return StatusCode(500, "Lỗi khi xóa đơn hàng: " + ex.Message);
-            }
-        }
-
-        // Get order details
-        [HttpGet("orders/{id}")]
-        public async Task<ActionResult<Order>> GetOrderDetails(int id)
-        {
             var order = await _context.Orders
-                .Include(o => o.OrderItems)
-                .ThenInclude(oi => oi.Flower)
-                .Include(o => o.User)
+                .Include(o => o.Payments)
                 .FirstOrDefaultAsync(o => o.OrderId == id);
 
             if (order == null)
@@ -394,22 +369,61 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return NotFound();
             }
 
-            var orderWithItems = new
-            {
-                OrderId = order.OrderId,
-                OrderDate = order.OrderDate,
-                UserName = order.User.Name,
-                OrderItems = order.OrderItems.Select(oi => new
-                {
-                    OrderItemId = oi.OrderItemId,
-                    FlowerId = oi.FlowerId,
-                    FlowerName = oi.Flower.FlowerName,
-                    Quantity = oi.Quantity,
-                    Price = oi.Price
-                }).ToList()
-            };
+            _context.Payments.RemoveRange(order.Payments);
+            _context.Orders.Remove(order);
 
-            return Ok(orderWithItems);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        [HttpGet("orders/{orderId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<object>> GetOrderDetails(int orderId)
+        {
+            try
+            {
+                var order = await _context.Orders
+                    .Include(o => o.OrderItems)
+                        .ThenInclude(oi => oi.Flower)
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId);
+
+                if (order == null)
+                {
+                    return NotFound();
+                }
+
+                var result = new
+                {
+                    orderId = order.OrderId,
+                    userId = order.UserId,
+                    orderDate = order.OrderDate,
+                    orderStatus = string.IsNullOrEmpty(order.OrderStatus) ? "Pending" : order.OrderStatus,
+                    deliveryAddress = order.DeliveryAddress ?? string.Empty,
+                    totalAmount = order.TotalAmount,
+                    orderDelivery = order.OrderDelivery,
+                    wardCode = order.WardCode,
+                    wardName = order.WardName ?? string.Empty,
+                    toDistrictId = order.ToDistrictId,
+                    note = order.Note ?? string.Empty,
+                    orderItems = order.OrderItems.Select(oi => new
+                    {
+                        orderItemId = oi.OrderItemId,
+                        orderId = oi.OrderId,
+                        flowerId = oi.FlowerId,
+                        quantity = oi.Quantity,
+                        price = oi.Price,
+                        flowerName = oi.Flower != null ? oi.Flower.FlowerName ?? string.Empty : string.Empty
+                    }).ToList()
+                };
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi
+                return StatusCode(500, new { message = "Lỗi server khi lấy chi tiết đơn hàng", error = ex.Message });
+            }
         }
 
         // Get dashboard stats
@@ -430,6 +444,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(stats);
         }
 
+        // Get daily income
         [HttpGet("dashboard/income")]
         public async Task<IActionResult> GetDailyIncome()
         {
@@ -446,101 +461,5 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             return Ok(dailyIncome);
         }
-        [Authorize]
-        [HttpGet("api/withdrawal-requests")]
-        public IActionResult GetWithdrawalRequests()
-        {
-            using (var context = new FlowerEventShopsContext())
-            {
-                var requests = context.WithdrawalRequests.ToList();
-                return Ok(requests);
-            }
-        }
-
-        [Authorize]
-        [HttpPut("api/withdrawal-request/{id}")]
-        public IActionResult UpdateWithdrawalRequest(int id, [FromBody] string status)
-        {
-            using (var context = new FlowerEventShopsContext())
-            {
-                var request = context.WithdrawalRequests.Find(id);
-                if (request == null)
-                {
-                    return NotFound();
-                }
-
-                request.Status = status;
-                context.SaveChanges();
-
-                return Ok("Trạng thái yêu cầu đã được cập nhật.");
-            }
-        }
-        [Authorize]
-        [HttpPost("api/withdrawals/{requestId}/approve")]
-        public async Task<IActionResult> ApproveWithdrawalRequest(int requestId)
-        {
-            using (var context = new FlowerEventShopsContext())
-            {
-                var request = await context.WithdrawalRequests.FindAsync(requestId);
-                if (request == null)
-                {
-                    return NotFound("Yêu cầu không tồn tại.");
-                }
-       
-                request.Status = "Approved";
-
-                var user = await context.Users.FindAsync(request.UserId);
-                if (user == null)
-                {
-                    return NotFound("Người dùng không tồn tại.");
-                }
-
-                
-                var totalRevenue = await context.OrderItems
-                    .Where(oi => oi.Flower.UserId == user.UserId && oi.Order.OrderStatus == "Completed")
-                    .SumAsync(oi => oi.Price * oi.Quantity);
-
-                
-                if (totalRevenue < request.Amount)
-                {
-                    return BadRequest("Doanh thu không đủ để thực hiện yêu cầu rút tiền.");
-                }
-
-                totalRevenue -= request.Amount;
-
-
-                await context.SaveChangesAsync();
-
-                return Ok("Yêu cầu đã được duyệt và doanh thu đã được cập nhật.");
-            }
-        }
-        // Get order statistics
-        [HttpGet("dashboard/orders")]
-        public async Task<IActionResult> GetOrderStats()
-        {
-            try
-            {
-                var orderStats = await _context.Orders
-                    .GroupBy(o => o.OrderDate.Value.Date) 
-                    .Select(g => new
-                    {
-                        Date = g.Key,
-                        Count = g.Count() 
-                    })
-                    .ToListAsync();
-
-                return Ok(orderStats);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error fetching order stats: " + ex.Message);
-                return StatusCode(500, "Lỗi khi tải dữ liệu thống kê đơn hàng.");
-            }
-        }
-        public class AdminUpdateOrderDeliveryDto
-        {
-            public string OrderDelivery { get; set; } 
-        }
-
     }
 }
