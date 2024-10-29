@@ -22,7 +22,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
         // GET: api/Reviews
-       
+
 
         // GET: api/Reviews/5
         [HttpGet("{id}")]
@@ -114,7 +114,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             var reviews = await _context.Reviews
                 .Include(r => r.User)
                 .Include(r => r.Flower)
-                .ThenInclude(f => f.Seller) // Include the seller (User) of the flower
+                .ThenInclude(f => f.Seller)
                 .Select(r => new
                 {
                     r.ReviewId,
@@ -154,9 +154,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
             return Ok(stats);
         }
 
-
-
-
         [HttpGet("flower/{flowerId}")]
         public async Task<ActionResult<object>> GetReviewsByFlowerId(int flowerId)
         {
@@ -178,12 +175,10 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
             var averageRating = reviews.Any() ? reviews.Average(r => r.Rating) : 0;
             var totalReviews = reviews.Count;
-            var totalReviews = reviews.Count;
 
             var result = new
             {
                 AverageRating = Math.Round(averageRating, 2),
-                TotalReviews = totalReviews,
                 TotalReviews = totalReviews,
                 Reviews = reviews
             };
@@ -230,6 +225,16 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public async Task<ActionResult<int>> GetReviewsCountByFlowerId(int flowerId)
         {
             var count = await _context.Reviews.CountAsync(r => r.FlowerId == flowerId);
+            return Ok(count);
+        }
+        [HttpGet("count-all-flowers/{sellerId}")]
+        public async Task<ActionResult<int>> GetReviewsCountForAllFlowersBySellerId(int sellerId)
+        {
+            var count = await _context.Reviews
+                .Include(r => r.Flower)
+                .Where(r => r.Flower.UserId == sellerId)
+                .CountAsync();
+
             return Ok(count);
         }
     }

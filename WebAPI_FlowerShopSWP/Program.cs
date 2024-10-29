@@ -49,6 +49,7 @@ namespace WebAPI_FlowerShopSWP
             builder.Services.AddScoped<IChatService, ChatService>();
             builder.Services.AddScoped<ShippingController>();
             builder.Services.AddScoped<ICartService, CartService>();
+            //builder.Services.AddHostedService<FlowerVisibilityService>();
             builder.Services.AddAutoMapper(cfg =>
             {
                 cfg.CreateMap<CartItem, CartItemDto>();

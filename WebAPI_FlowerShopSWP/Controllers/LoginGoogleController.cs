@@ -43,7 +43,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 }
                 _logger.LogInformation($"Received Access token: {request.AccessToken}");
 
-                // Validate the access token and get user info
                 var userInfoClient = new Oauth2Service(new BaseClientService.Initializer
                 {
                     HttpClientInitializer = GoogleCredential.FromAccessToken(request.AccessToken)
@@ -55,7 +54,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
                 if (user == null)
                 {
-                    // User không tồn tại, trả về thông tin để frontend xử lý
                     _logger.LogInformation($"New user detected: {userInfo.Email}");
                     return Ok(new
                     {
@@ -65,7 +63,6 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     });
                 }
 
-                // User đã tồn tại, tạo token và trả về như bình thường
                 _logger.LogInformation($"Existing user found: {user.Email}, UserId: {user.UserId}");
                 var token = GenerateJwtToken(user);
                 return Ok(new
@@ -78,7 +75,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during Google authentication");
-                return StatusCode(500, $"An error occurred during authentication: {ex.Message}");
+                return StatusCode(500, "An error occurred during authentication: {ex.Message}");
             }
         }
 

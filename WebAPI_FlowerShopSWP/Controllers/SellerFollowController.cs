@@ -6,8 +6,10 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using WebAPI_FlowerShopSWP.DTO;
 using WebAPI_FlowerShopSWP.Models;
 using WebAPI_FlowerShopSWP.Services;
 
@@ -17,17 +19,19 @@ namespace WebAPI_FlowerShopSWP.Controllers
     public class SellerFollowController : ControllerBase
     {
         private readonly ISellerFollowService _sellerFollowService;
+        private readonly INotificationService _notificationService;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public SellerFollowController(ISellerFollowService sellerFollowService)
+        public SellerFollowController(
+        ISellerFollowService sellerFollowService,
+        INotificationService notificationService,
+        IHubContext<NotificationHub> hubContext)
         {
             _sellerFollowService = sellerFollowService;
+            _notificationService = notificationService;
+            _hubContext = hubContext;
         }
-        [HttpGet("followers-count/{sellerId}")]
-        public async Task<IActionResult> GetFollowersCount(int sellerId)
-        {
-            var count = await _sellerFollowService.GetFollowersCount(sellerId);
-            return Ok(count);
-        }
+
 
         [HttpGet("followers-count/{sellerId}")]
         public async Task<IActionResult> GetFollowersCount(int sellerId)
@@ -40,6 +44,24 @@ namespace WebAPI_FlowerShopSWP.Controllers
         public async Task<IActionResult> FollowSeller([FromBody] SellerFollow model)
         {
             var result = await _sellerFollowService.FollowSeller(model.UserId, model.SellerId);
+
+            // Create notification for the seller
+            var notification = new CreateNotificationDTO
+            {
+                UserId = model.SellerId,
+                Title = "Người theo dõi mới",
+                Content = $"Bạn có một người theo dõi mới!",
+                Type = "Follow",
+                RelatedId = model.UserId,
+                RelatedType = "User"
+            };
+
+            var createdNotification = await _notificationService.CreateNotification(notification);
+
+            // Send real-time notification through SignalR
+            await _hubContext.Clients.User(model.SellerId.ToString())
+                .SendAsync("ReceiveNotification", createdNotification);
+
             return Ok(result);
         }
 
