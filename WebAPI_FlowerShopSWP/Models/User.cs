@@ -29,7 +29,14 @@ namespace WebAPI_FlowerShopSWP.Models
 
             SellerConversations = new HashSet<Conversation>();
 
+<<<<<<< HEAD
             BuyerConversations = new HashSet<Conversation>();
+=======
+    [NotMapped]
+    public IFormFile? ProfileImageFile { get; set; }
+
+    public DateTime? RegistrationDate { get; set; }
+>>>>>>> 4aaea305f05818d11577be37aeff61a05b19b3cf
 
         }
 

@@ -301,182 +301,40 @@ namespace WebAPI_FlowerShopSWP.Controllers
         }
 
 
-        [Authorize]
-        [HttpPut("profile")]
-        public async Task<IActionResult> UpdateUserProfile([FromForm] string FullName, [FromForm] string Email, [FromForm] string Address, [FromForm] string Phone, [FromForm] IFormFile? image)
-        {
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            var user = await _context.Users.FindAsync(userId);
-
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            user.FullName = FullName;
-            user.Email = Email;
-            user.Address = Address;
-            user.Phone = Phone;
-
-
-            if (image != null)
-            {
-                user.ProfileImageUrl = await SaveImageAsync(image);
-            }
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!UserExists(userId))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return Ok(user);
-        }
-        private async Task<string> SaveImageAsync(IFormFile image)
-        {
-            if (image == null || image.Length == 0)
-            {
-                throw new ArgumentException("Invalid file");
-            }
-
-            var uploadPath = Path.Combine(_webHostEnvironment.WebRootPath, "images");
-            if (!Directory.Exists(uploadPath))
-            {
-                Directory.CreateDirectory(uploadPath);
-            }
-
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
-            var filePath = Path.Combine(uploadPath, fileName);
-
-            using (var fileStream = new FileStream(filePath, FileMode.Create))
-            {
-                await image.CopyToAsync(fileStream);
-            }
-
-            return "/images/" + fileName;
-        }
-
-        [Authorize]
-        [HttpPost("upload-profile-image")]
-        public async Task<IActionResult> UploadProfileImage(IFormFile file)
-        {
-            if (file == null || file.Length == 0)
-            {
-                return BadRequest("No file uploaded.");
-            }
-
-
-            var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
-
-
-            if (!Directory.Exists(uploadsFolderPath))
-            {
-                Directory.CreateDirectory(uploadsFolderPath);
-            }
-
-
-            var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-
-
-            var filePath = Path.Combine(uploadsFolderPath, uniqueFileName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-
-
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            var user = await _context.Users.FindAsync(userId);
-
-            if (user == null)
-            {
-                return NotFound("User not found.");
-            }
-
-            user.ProfileImageUrl = "/images/" + uniqueFileName;
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
-        }
-
-
-
+       
 
         [HttpGet("revenue/{sellerId}")]
         public async Task<IActionResult> GetRevenue(int sellerId)
         {
-            try
+            var completedOrderItems = await _context.OrderItems
+                .Where(oi => oi.Flower.UserId == sellerId && oi.Order.OrderStatus == "Completed")
+                .Include(oi => oi.Order)
+                .Include(oi => oi.Flower)
+                .ToListAsync();
+
+            var totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
+            var commission = totalRevenue * (decimal)0.30;
+            var netRevenue = totalRevenue - commission;
+
+            var revenueDetails = completedOrderItems
+                .Where(oi => oi.Order.OrderDate.HasValue)
+                .GroupBy(oi => new { Day = oi.Order.OrderDate.Value.Date })
+                .Select(g => new
+                {
+                    Date = g.Key.Day.ToString("dd/MM/yyyy"),
+                    Amount = g.Sum(oi => oi.Price * oi.Quantity)
+                })
+                .ToList();
+
+            var result = new
             {
-                var seller = await _context.Users.FindAsync(sellerId);
-                if (seller == null)
-                {
-                    return NotFound(new { message = "Không tìm thấy người bán" });
-                }
+                TotalRevenue = totalRevenue,
+                Commission = commission,
+                NetRevenue = netRevenue,
+                Details = revenueDetails
+            };
 
-                var completedOrderItems = await _context.OrderItems
-                    .Where(oi => oi.Flower != null
-                        && oi.Flower.UserId == sellerId
-                        && oi.Order != null
-                        && oi.Order.OrderStatus == "Completed"
-                        && oi.Order.OrderDate.HasValue
-                        && oi.Price > 0
-                        && oi.Quantity > 0)
-                    .Select(oi => new
-                    {
-                        OrderDate = oi.Order.OrderDate.Value,
-                        Price = oi.Price,
-                        Quantity = oi.Quantity
-                    })
-                    .ToListAsync();
-
-                decimal totalRevenue = 0;
-                decimal commission = 0;
-                decimal netRevenue = 0;
-                var revenueDetails = new List<object>();
-
-                if (completedOrderItems.Any())
-                {
-                    totalRevenue = completedOrderItems.Sum(oi => oi.Price * oi.Quantity);
-                    commission = Math.Round(totalRevenue * 0.30m, 2);
-                    netRevenue = totalRevenue - commission;
-
-                    revenueDetails = completedOrderItems
-                        .GroupBy(oi => oi.OrderDate.Date)
-                        .Select(g => new
-                        {
-                            Date = g.Key.ToString("dd/MM/yyyy"),
-                            Amount = g.Sum(oi => oi.Price * oi.Quantity)
-                        })
-                        .OrderBy(x => DateTime.ParseExact(x.Date, "dd/MM/yyyy",
-                            System.Globalization.CultureInfo.InvariantCulture))
-                        .ToList<object>();
-                }
-
-                var result = new
-                {
-                    TotalRevenue = Math.Round(totalRevenue, 2),
-                    Commission = Math.Round(commission, 2),
-                    NetRevenue = Math.Round(netRevenue, 2),
-                    Details = revenueDetails
-                };
-
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Đã xảy ra lỗi khi tải dữ liệu doanh thu" });
-            }
+            return Ok(result);
         }
 
         [Authorize]
@@ -557,6 +415,82 @@ namespace WebAPI_FlowerShopSWP.Controllers
                 return Ok(requests);
             }
         }
+      
+        private async Task<string> SaveImageAsync(IFormFile image)
+        {
+            if (image == null || image.Length == 0)
+            {
+                throw new ArgumentException("Invalid file");
+            }
+
+            var uploadPath = Path.Combine(_webHostEnvironment.WebRootPath, "images");
+            if (!Directory.Exists(uploadPath))
+            {
+                Directory.CreateDirectory(uploadPath);
+            }
+
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
+            var filePath = Path.Combine(uploadPath, fileName);
+
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await image.CopyToAsync(fileStream);
+            }
+
+            return "/images/" + fileName;
+        }
+
+        [Authorize]
+        [HttpPost("upload-profile-image")]
+        public async Task<IActionResult> UploadProfileImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+
+            var uploadsFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
+
+
+            if (!Directory.Exists(uploadsFolderPath))
+            {
+                Directory.CreateDirectory(uploadsFolderPath);
+            }
+
+
+            var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+
+
+            var filePath = Path.Combine(uploadsFolderPath, uniqueFileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var user = await _context.Users.FindAsync(userId);
+
+            if (user == null)
+            {
+                return NotFound("User not found.");
+            }
+
+            user.ProfileImageUrl = "/images/" + uniqueFileName;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "File uploaded successfully.", profileImageUrl = user.ProfileImageUrl });
+        }
+
+
+
+
+       
+
+       
+       
         [Authorize]
         [HttpDelete("api/withdrawal-requests/{requestId}")]
         public IActionResult CancelWithdrawalRequest(int requestId)

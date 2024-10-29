@@ -23,9 +23,18 @@ public partial class Order
     public string WardName { get; set; }
     public string? Note { get; set; }
 
+<<<<<<< HEAD
     [JsonIgnore]
     public virtual User User { get; set; } = null!;
 
+=======
+
+    [JsonIgnore]
+    public virtual User User { get; set; } = null!;
+
+
+
+>>>>>>> 4aaea305f05818d11577be37aeff61a05b19b3cf
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();

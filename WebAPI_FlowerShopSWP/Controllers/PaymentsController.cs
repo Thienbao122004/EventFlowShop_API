@@ -295,9 +295,21 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
                 Đơn hàng của bạn đã được xác nhận và thanh toán thành công.
 
+<<<<<<< HEAD
                 Chi tiết đơn hàng:
                 - Mã đơn hàng: {order.OrderId.ToString()}
                 - Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
+=======
+Chi tiết đơn hàng:
+- Mã đơn hàng: {order.OrderId}
+- Ngày đặt hàng: {order.OrderDate:dd/MM/yyyy HH:mm}
+
+Các món đã đặt:
+{itemsList}
+Tổng phụ: {subtotal:N0} VNĐ
+Phí vận chuyển: {(totalAmount - subtotal):N0} VNĐ
+Tổng cộng: {totalAmount:N0} VNĐ
+>>>>>>> 4aaea305f05818d11577be37aeff61a05b19b3cf
 
                 Các món đã đặt:
                 {itemsList}

@@ -37,9 +37,16 @@ using WebAPI_FlowerShopSWP.Controllers;
         public virtual DbSet<User> Users { get; set; }
 
         public DbSet<SellerRegistrationRequest> SellerRegistrationRequests { get; set; }
+<<<<<<< HEAD
         public DbSet<Cart> Carts { get; set; }
         public DbSet<CartItem> CartItems { get; set; }
     public virtual DbSet<SellerFollow> SellerFollows { get; set; }
+=======
+
+        public virtual DbSet<SellerFollow> SellerFollows { get; set; }
+
+        public virtual DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
+>>>>>>> 4aaea305f05818d11577be37aeff61a05b19b3cf
 
         public virtual DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
 
