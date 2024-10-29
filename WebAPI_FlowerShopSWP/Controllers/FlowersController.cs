@@ -159,6 +159,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
  [FromForm] decimal Price,
  [FromForm] int Quantity,
  [FromForm] int CategoryId,
+ [FromForm] string Condition,
  [FromForm] IFormFile? image)
         {
             try
@@ -180,7 +181,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     Quantity = Quantity,
                     CategoryId = CategoryId,
                     UserId = userId,
-                    Condition = "New",
+                    Condition = Condition,
                     Status = "Available",
                     ListingDate = DateTime.UtcNow
                 };
@@ -248,6 +249,12 @@ namespace WebAPI_FlowerShopSWP.Controllers
             {
                 return NotFound();
             }
+
+            var reviews = await _context.Reviews.Where(r => r.FlowerId == id).ToListAsync();
+            _context.Reviews.RemoveRange(reviews);
+
+            var orderItems = await _context.OrderItems.Where(oi => oi.FlowerId == id).ToListAsync();
+            _context.OrderItems.RemoveRange(orderItems);
 
             _context.Flowers.Remove(flower);
             await _context.SaveChangesAsync();
@@ -422,6 +429,24 @@ namespace WebAPI_FlowerShopSWP.Controllers
                     message = $"Lỗi khi tạo đơn hàng: {ex.Message}"
                 });
             }
+        }
+        [HttpPut("update-visibility")]
+        public IActionResult UpdateFlowerVisibility()
+        {
+            var currentTime = DateTime.UtcNow;
+            var flowersToUpdate = _context.Flowers.Where(flower =>
+                flower.ListingDate.HasValue &&
+                currentTime > flower.ListingDate.Value.AddHours(24) &&
+                flower.IsVisible).ToList();
+
+            foreach (var flower in flowersToUpdate)
+            {
+                flower.IsVisible = false;
+            }
+
+            _context.SaveChanges();
+
+            return Ok(new { Message = $"{flowersToUpdate.Count} flowers were updated to not visible." });
         }
     }
 }
